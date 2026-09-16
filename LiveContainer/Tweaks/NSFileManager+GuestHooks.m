@@ -35,7 +35,8 @@ void NSFMGuestHooksInit(void) {
 @implementation NSFileManager(LiveContainerHooks)
 
 - (nullable NSURL *)hook_containerURLForSecurityApplicationGroupIdentifier:(NSString *)groupIdentifier {
-    if([groupIdentifier isEqualToString:[NSClassFromString(@"LCSharedUtils") appGroupID]]) {
+    // AnderStore: lcAppGroupPath is nil when the app was signed without an app group; fall through instead of crashing
+    if(NSUserDefaults.lcAppGroupPath && [groupIdentifier isEqualToString:[NSClassFromString(@"LCSharedUtils") appGroupID]]) {
         return [NSURL fileURLWithPath: NSUserDefaults.lcAppGroupPath];
     }
     NSURL *result;
