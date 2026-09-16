@@ -3794,7 +3794,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Press the Plus Button to Install Apps."
+            "value" : "No apps yet. Open the Store tab and tap Install on an app."
           }
         },
         "es" : {
@@ -3842,7 +3842,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Нажмите на кнопку '+', чтобы установить приложения."
+            "value" : "Приложений пока нет. Откройте вкладку «Магазин» и нажмите «Установить» у нужного приложения."
           }
         },
         "sv" : {
@@ -32709,121 +32709,495 @@
         }
       }
     },
-    "lc.account.appleId" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple ID & certificate"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple ID и сертификат"
-          }
-        }
-      }
-    },
-    "lc.account.appleIdDesc" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign in once to sign AnderStore and your apps"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Войдите один раз, чтобы подписывать AnderStore и приложения"
-          }
-        }
-      }
-    },
-    "lc.account.refresh" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Refresh signature"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Обновление подписи"
-          }
-        }
-      }
-    },
-    "lc.account.refreshDesc" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Every 7 days, with LocalDevVPN enabled"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Раз в 7 дней, с включённым LocalDevVPN"
-          }
-        }
-      }
-    },
-    "lc.account.install" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stores and installs"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Магазины и установка"
-          }
-        }
-      }
-    },
-    "lc.account.installDesc" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Manage sources and installed apps"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Источники и установленные приложения"
-          }
-        }
-      }
-    },
     "lc.account.open" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Open account settings"
+            "value" : "Account settings"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Открыть настройки аккаунта"
+            "value" : "Настройки аккаунта"
+          }
+        }
+      }
+    },
+    "lc.account.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Help with pictures"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Помощь с картинками"
+          }
+        }
+      }
+    },
+    "lc.account.signature" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signature"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подпись"
+          }
+        }
+      }
+    },
+    "lc.account.daysLeft" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld days left"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Действует ещё %lld дн."
+          }
+        }
+      }
+    },
+    "lc.account.daysUnknown" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signature date unknown"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Срок подписи неизвестен"
+          }
+        }
+      }
+    },
+    "lc.account.refreshHint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A free Apple ID signs apps for 7 days. Turn on LocalDevVPN and tap Refresh before it ends."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бесплатный Apple ID подписывает на 7 дней. Включите LocalDevVPN и нажмите «Обновить» до окончания срока."
+          }
+        }
+      }
+    },
+    "lc.account.refreshNow" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh now"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновить сейчас"
+          }
+        }
+      }
+    },
+    "lc.account.reminderTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore signature ends soon"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Скоро закончится подпись AnderStore"
+          }
+        }
+      }
+    },
+    "lc.account.reminderBody" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on LocalDevVPN, open AnderStore and tap Refresh, or your apps will stop opening."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Включите LocalDevVPN, откройте AnderStore и нажмите «Обновить», иначе приложения перестанут открываться."
+          }
+        }
+      }
+    },
+    "lc.account.setupTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish setup"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Завершите настройку"
+          }
+        }
+      }
+    },
+    "lc.account.stepLogin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in with Apple ID"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Войдите в Apple ID"
+          }
+        }
+      }
+    },
+    "lc.account.stepLoginDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open account settings and sign in with the same Apple ID you used on the computer."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Откройте настройки аккаунта и войдите тем же Apple ID, что и на компьютере."
+          }
+        }
+      }
+    },
+    "lc.account.stepLoginAction" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Войти"
+          }
+        }
+      }
+    },
+    "lc.account.stepCert" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect the certificate"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключите сертификат"
+          }
+        }
+      }
+    },
+    "lc.account.stepCertDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Settings tap “Import Certificate from AnderStore”. Needed to install apps."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В «Настройках» нажмите «Импортировать сертификат из AnderStore». Нужно для установки приложений."
+          }
+        }
+      }
+    },
+    "lc.account.stepCertAction" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть Настройки"
+          }
+        }
+      }
+    },
+    "lc.account.stepVPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install LocalDevVPN"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Установите LocalDevVPN"
+          }
+        }
+      }
+    },
+    "lc.account.stepVPNDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Free app from the App Store. It lets AnderStore refresh the signature."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бесплатное приложение из App Store. Нужно, чтобы AnderStore обновлял подпись."
+          }
+        }
+      }
+    },
+    "lc.account.stepVPNAction" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I installed it"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Я установил"
+          }
+        }
+      }
+    },
+    "lc.account.allDone" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All set"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Всё настроено"
+          }
+        }
+      }
+    },
+    "lc.account.allDoneDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install apps from the Store tab."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Устанавливайте приложения на вкладке «Магазин»."
+          }
+        }
+      }
+    },
+    "lc.welcome.storeTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App store"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Магазин приложений"
+          }
+        }
+      }
+    },
+    "lc.welcome.storeText" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick an app on the Store tab and tap Install."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите приложение на вкладке «Магазин» и нажмите «Установить»."
+          }
+        }
+      }
+    },
+    "lc.welcome.appsTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps inside AnderStore"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приложения внутри AnderStore"
+          }
+        }
+      }
+    },
+    "lc.welcome.appsText" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installed apps live on the Apps tab. There is no limit — they don’t take extra slots of your Apple ID."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Установленные приложения — на вкладке «Приложения». Их можно ставить сколько угодно: лимит Apple ID не расходуется."
+          }
+        }
+      }
+    },
+    "lc.welcome.refreshTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once a week — refresh"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Раз в неделю — обновить"
+          }
+        }
+      }
+    },
+    "lc.welcome.refreshText" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every 7 days turn on LocalDevVPN and tap Refresh on the Account tab. AnderStore will remind you."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Раз в 7 дней включите LocalDevVPN и нажмите «Обновить» на вкладке «Аккаунт». AnderStore напомнит."
+          }
+        }
+      }
+    },
+    "lc.welcome.next" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Далее"
+          }
+        }
+      }
+    },
+    "lc.welcome.start" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get started"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Начать"
           }
         }
       }

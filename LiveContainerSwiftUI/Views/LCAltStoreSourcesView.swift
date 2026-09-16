@@ -888,7 +888,10 @@ private struct AltStoreSourceSectionView: View {
                 } else {
                     Menu {
                         Button("lc.sources.refresh".loc, systemImage: "arrow.clockwise", action: onRefresh)
-                        Button("lc.sources.removeSource".loc, systemImage: "trash", role: .destructive, action: onRemove)
+                        // AnderStore: the official store cannot be removed
+                        if item.url.absoluteString != "https://store.andresot.uk/source.json" {
+                            Button("lc.sources.removeSource".loc, systemImage: "trash", role: .destructive, action: onRemove)
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .imageScale(.large)

@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import UserNotifications
 
 struct LCTabView: View {
     @State var errorShow = false
@@ -18,6 +19,7 @@ struct LCTabView: View {
     @State var shouldToggleMainWindowOpen = false
     @Environment(\.scenePhase) var scenePhase
     @StateObject var downloadHelper = DownloadHelper()
+    @AppStorage("anderWelcomeShown") private var welcomeShown = false
 
     let pub = NotificationCenter.default.publisher(for: UIScene.didDisconnectNotification)
     
@@ -49,6 +51,9 @@ struct LCTabView: View {
                 .tag(LCTabIdentifier.settings)
         }
         .tint(AnderTheme.accent)
+        .fullScreenCover(isPresented: Binding(get: { !welcomeShown }, set: { if !$0 { welcomeShown = true } })) {
+            AnderWelcomeView { welcomeShown = true }
+        }
         .onAppear { AnderTheme.applyAppearance() }
         .downloadAlert(helper: downloadHelper)
         .environmentObject(downloadHelper)
@@ -322,61 +327,69 @@ enum AnderTheme {
     }
 }
 
-// MARK: - AnderStore account tab (opens the built-in AnderStore Core)
-struct AnderAccountView: View {
-    private struct Feature: Identifiable {
-        let id = UUID()
-        let icon: String
-        let title: String
-        let subtitle: String
+// MARK: - AnderStore account tab (signature status, setup checklist, opens the built-in AnderStore Core)
+enum AnderSignature {
+    /// Expiration date of this app's own provisioning profile — when it passes, AnderStore stops launching.
+    static func expirationDate() -> Date? {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url),
+              let start = data.range(of: Data("<?xml".utf8)),
+              let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex)
+        else { return nil }
+        let plistData = data.subdata(in: start.lowerBound..<end.upperBound)
+        guard let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any]
+        else { return nil }
+        return plist["ExpirationDate"] as? Date
     }
 
-    private let features = [
-        Feature(icon: "person.badge.key.fill", title: "lc.account.appleId".loc, subtitle: "lc.account.appleIdDesc".loc),
-        Feature(icon: "arrow.clockwise.circle.fill", title: "lc.account.refresh".loc, subtitle: "lc.account.refreshDesc".loc),
-        Feature(icon: "square.and.arrow.down.fill", title: "lc.account.install".loc, subtitle: "lc.account.installDesc".loc),
-    ]
+    static func daysLeft(until date: Date) -> Int {
+        max(0, Int(ceil(date.timeIntervalSinceNow / 86_400)))
+    }
+
+    static func scheduleReminders(expiration: Date) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            guard granted else { return }
+            let ids = ["anderstore.signature.2d", "anderstore.signature.1d"]
+            center.removePendingNotificationRequests(withIdentifiers: ids)
+            for (id, daysBefore) in zip(ids, [2.0, 1.0]) {
+                let fireDate = expiration.addingTimeInterval(-daysBefore * 86_400)
+                guard fireDate > Date() else { continue }
+                let content = UNMutableNotificationContent()
+                content.title = "lc.account.reminderTitle".loc
+                content.body = "lc.account.reminderBody".loc
+                content.sound = .default
+                let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+                center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
+            }
+        }
+    }
+}
+
+struct AnderAccountView: View {
+    @EnvironmentObject private var sharedModel: SharedModel
+    @AppStorage("anderVPNInstalled") private var vpnInstalled = false
+    @State private var expiration: Date? = nil
+    @State private var certificateReady = false
+
+    private var allDone: Bool { certificateReady && vpnInstalled }
 
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 16) {
-                    VStack(spacing: 8) {
-                        ZStack {
-                            Circle().fill(AnderTheme.accent)
-                            Text("A").font(.system(size: 34, weight: .semibold)).foregroundColor(.white)
-                        }
-                        .frame(width: 72, height: 72)
-                        Text("AnderStore").font(.title2.weight(.semibold))
-                        Text("lc.account.subtitle".loc)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+                    header
+                    signatureCard
+                    if allDone {
+                        doneCard
+                    } else {
+                        checklist
                     }
-                    .padding(.vertical, 8)
-
-                    ForEach(features) { feature in
-                        HStack(spacing: 14) {
-                            Image(systemName: feature.icon)
-                                .font(.system(size: 22))
-                                .foregroundColor(AnderTheme.accent)
-                                .frame(width: 32)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(feature.title).font(.body.weight(.medium))
-                                Text(feature.subtitle).font(.footnote).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                        }
-                        .padding(16)
-                        .background(AnderTheme.card)
-                        .overlay(RoundedRectangle(cornerRadius: AnderTheme.radiusCard).stroke(AnderTheme.border, lineWidth: 1))
-                        .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
-                    }
-
                     Button {
                         LCUtils.openSideStore()
                     } label: {
-                        Text("lc.account.open".loc)
+                        Label("lc.account.open".loc, systemImage: "person.crop.circle")
                             .font(.body.weight(.medium))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -384,12 +397,212 @@ struct AnderAccountView: View {
                             .background(AnderTheme.accent)
                             .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
                     }
+                    Button {
+                        if let url = URL(string: "https://store.andresot.uk/help") {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label("lc.account.help".loc, systemImage: "questionmark.circle")
+                            .foregroundColor(AnderTheme.accent)
+                    }
                     .padding(.top, 4)
                 }
                 .padding(16)
             }
             .background(AnderTheme.background.ignoresSafeArea())
             .navigationTitle("lc.tabView.account".loc)
+            .onAppear(perform: reload)
         }
+    }
+
+    private func reload() {
+        certificateReady = LCSharedUtils.certificatePassword() != nil
+        expiration = AnderSignature.expirationDate()
+        if let expiration {
+            AnderSignature.scheduleReminders(expiration: expiration)
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle().fill(AnderTheme.accent)
+                Text("A").font(.system(size: 34, weight: .semibold)).foregroundColor(.white)
+            }
+            .frame(width: 72, height: 72)
+            Text("AnderStore").font(.title2.weight(.semibold))
+            Text("lc.account.subtitle".loc)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var signatureCard: some View {
+        let days = expiration.map { AnderSignature.daysLeft(until: $0) }
+        let color: Color = {
+            guard let days else { return .secondary }
+            if days <= 1 { return .red }
+            if days <= 3 { return .orange }
+            return .green
+        }()
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(color)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("lc.account.signature".loc).font(.footnote).foregroundStyle(.secondary)
+                    if let days {
+                        Text(String(format: "lc.account.daysLeft".loc, days))
+                            .font(.title3.weight(.semibold))
+                            .foregroundColor(color)
+                    } else {
+                        Text("lc.account.daysUnknown".loc).font(.body.weight(.medium))
+                    }
+                }
+                Spacer()
+            }
+            Text("lc.account.refreshHint".loc)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button {
+                LCUtils.openSideStore()
+            } label: {
+                Label("lc.account.refreshNow".loc, systemImage: "arrow.clockwise")
+                    .font(.body.weight(.medium))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(AnderTheme.accent.opacity(0.16))
+                    .foregroundColor(AnderTheme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusButton))
+            }
+        }
+        .anderCard()
+    }
+
+    private var checklist: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("lc.account.setupTitle".loc).font(.headline)
+            checklistRow(done: certificateReady, number: 1, title: "lc.account.stepLogin".loc, detail: "lc.account.stepLoginDesc".loc, action: "lc.account.stepLoginAction".loc) {
+                LCUtils.openSideStore()
+            }
+            checklistRow(done: certificateReady, number: 2, title: "lc.account.stepCert".loc, detail: "lc.account.stepCertDesc".loc, action: "lc.account.stepCertAction".loc) {
+                sharedModel.selectedTab = .settings
+            }
+            checklistRow(done: vpnInstalled, number: 3, title: "lc.account.stepVPN".loc, detail: "lc.account.stepVPNDesc".loc, action: "lc.account.stepVPNAction".loc) {
+                vpnInstalled = true
+            }
+        }
+        .anderCard()
+    }
+
+    private func checklistRow(done: Bool, number: Int, title: String, detail: String, action: String, perform: @escaping () -> Void) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle().fill(done ? Color.green : AnderTheme.accent)
+                if done {
+                    Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                } else {
+                    Text("\(number)").font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                }
+            }
+            .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.weight(.medium)).strikethrough(done)
+                Text(detail).font(.footnote).foregroundStyle(.secondary)
+                if !done {
+                    Button(action, action: perform)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundColor(AnderTheme.accent)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    private var doneCard: some View {
+        HStack(spacing: 12) {
+            Text("🎉").font(.system(size: 30))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("lc.account.allDone".loc).font(.headline)
+                Text("lc.account.allDoneDesc".loc).font(.footnote).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .anderCard()
+    }
+}
+
+extension View {
+    func anderCard() -> some View {
+        self
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AnderTheme.card)
+            .overlay(RoundedRectangle(cornerRadius: AnderTheme.radiusCard).stroke(AnderTheme.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
+    }
+}
+
+// MARK: - AnderStore first-launch welcome
+struct AnderWelcomeView: View {
+    let onFinish: () -> Void
+    @State private var page = 0
+
+    private let pages: [(icon: String, title: String, text: String)] = [
+        ("bag.fill", "lc.welcome.storeTitle".loc, "lc.welcome.storeText".loc),
+        ("square.grid.2x2.fill", "lc.welcome.appsTitle".loc, "lc.welcome.appsText".loc),
+        ("arrow.clockwise.circle.fill", "lc.welcome.refreshTitle".loc, "lc.welcome.refreshText".loc),
+    ]
+
+    var body: some View {
+        VStack(spacing: 24) {
+            TabView(selection: $page) {
+                ForEach(pages.indices, id: \.self) { index in
+                    VStack(spacing: 20) {
+                        Spacer()
+                        ZStack {
+                            Circle().fill(AnderTheme.accent.opacity(0.16))
+                            Image(systemName: pages[index].icon)
+                                .font(.system(size: 52))
+                                .foregroundColor(AnderTheme.accent)
+                        }
+                        .frame(width: 128, height: 128)
+                        Text(pages[index].title)
+                            .font(.title.weight(.semibold))
+                            .multilineTextAlignment(.center)
+                        Text(pages[index].text)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                        Spacer()
+                    }
+                    .tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+
+            Button {
+                if page < pages.count - 1 {
+                    withAnimation { page += 1 }
+                } else {
+                    onFinish()
+                }
+            } label: {
+                Text(page < pages.count - 1 ? "lc.welcome.next".loc : "lc.welcome.start".loc)
+                    .font(.body.weight(.medium))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(AnderTheme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
+        }
+        .background(AnderTheme.background.ignoresSafeArea())
     }
 }
