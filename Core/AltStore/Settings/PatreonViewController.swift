@@ -81,7 +81,7 @@ final class PatreonViewController: UICollectionViewController, UICollectionViewD
     
     @objc func openInstagramURL(_ sender: UIButton)
     {
-        let twitterURL = URL(string: "https://instagram.com/sidestore.io")!
+        let twitterURL = URL(string: "https://andresot.ru")!
         self.openWebURL(twitterURL, preferredTintColor: self.view.tintColor)
     }
 }

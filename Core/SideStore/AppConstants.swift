@@ -132,9 +132,9 @@ public enum AppConstants {
         public static let pairingDocumentation      = URL(string: "https://docs.sidestore.io/docs/advanced/pairing-file")!
         public static let errorCodesDocumentation   = URL(string: "https://docs.sidestore.io/docs/troubleshooting/error-codes")!
         public static let sideStoreWebsite          = URL(string: "https://andresot.ru")!
-        public static let sideStoreGitHub           = URL(string: "https://github.com/SideStore")!
-        public static let sideStoreIssues           = URL(string: "https://github.com/SideStore/SideStore/issues")!
-        public static let sideStoreDiscord          = URL(string: "https://discord.gg/sidestore-949183273383395328")!
+        public static let sideStoreGitHub           = URL(string: "https://github.com/ANDRESOTRU/AnderStore")!
+        public static let sideStoreIssues           = URL(string: "https://github.com/ANDRESOTRU/AnderStore/issues")!
+        public static let sideStoreDiscord          = URL(string: "https://andresot.ru")!
     }
 
     public enum Minimuxer {

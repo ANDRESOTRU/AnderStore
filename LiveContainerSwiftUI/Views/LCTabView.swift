@@ -35,6 +35,13 @@ struct LCTabView: View {
                     Label("lc.tabView.apps".loc, systemImage: "square.grid.2x2.fill")
                 }
                 .tag(LCTabIdentifier.apps)
+            if UserDefaults.sideStoreExist() {
+                AnderAccountView()
+                    .tabItem {
+                        Label("lc.tabView.account".loc, systemImage: "person.crop.circle.fill")
+                    }
+                    .tag(LCTabIdentifier.account)
+            }
             LCSettingsView()
                 .tabItem {
                     Label("lc.tabView.settings".loc, systemImage: "gearshape.fill")
@@ -312,5 +319,77 @@ enum AnderTheme {
 
         UITableView.appearance().backgroundColor = backgroundUI
         UISwitch.appearance().onTintColor = accentUI
+    }
+}
+
+// MARK: - AnderStore account tab (opens the built-in AnderStore Core)
+struct AnderAccountView: View {
+    private struct Feature: Identifiable {
+        let id = UUID()
+        let icon: String
+        let title: String
+        let subtitle: String
+    }
+
+    private let features = [
+        Feature(icon: "person.badge.key.fill", title: "lc.account.appleId".loc, subtitle: "lc.account.appleIdDesc".loc),
+        Feature(icon: "arrow.clockwise.circle.fill", title: "lc.account.refresh".loc, subtitle: "lc.account.refreshDesc".loc),
+        Feature(icon: "square.and.arrow.down.fill", title: "lc.account.install".loc, subtitle: "lc.account.installDesc".loc),
+    ]
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    VStack(spacing: 8) {
+                        ZStack {
+                            Circle().fill(AnderTheme.accent)
+                            Text("A").font(.system(size: 34, weight: .semibold)).foregroundColor(.white)
+                        }
+                        .frame(width: 72, height: 72)
+                        Text("AnderStore").font(.title2.weight(.semibold))
+                        Text("lc.account.subtitle".loc)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.vertical, 8)
+
+                    ForEach(features) { feature in
+                        HStack(spacing: 14) {
+                            Image(systemName: feature.icon)
+                                .font(.system(size: 22))
+                                .foregroundColor(AnderTheme.accent)
+                                .frame(width: 32)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(feature.title).font(.body.weight(.medium))
+                                Text(feature.subtitle).font(.footnote).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .padding(16)
+                        .background(AnderTheme.card)
+                        .overlay(RoundedRectangle(cornerRadius: AnderTheme.radiusCard).stroke(AnderTheme.border, lineWidth: 1))
+                        .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
+                    }
+
+                    Button {
+                        LCUtils.openSideStore()
+                    } label: {
+                        Text("lc.account.open".loc)
+                            .font(.body.weight(.medium))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(AnderTheme.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(16)
+            }
+            .background(AnderTheme.background.ignoresSafeArea())
+            .navigationTitle("lc.tabView.account".loc)
+        }
     }
 }

@@ -47,6 +47,8 @@ final class TabBarController: UITabBarController
         
         let sourcesNavigationController = self.viewControllers![Tab.sources.rawValue] as! UINavigationController
         self.sourcesViewController = sourcesNavigationController.viewControllers.first as? SourcesViewController
+
+        self.installBackToAnderStoreButtons()
     }
     
     override func viewDidAppear(_ animated: Bool)
@@ -106,5 +108,41 @@ private extension TabBarController
     @objc func openErrorLog(_ notification: Notification)
     {
         self.selectedIndex = Tab.settings.rawValue
+    }
+}
+
+// MARK: - AnderStore: return from Core to the main AnderStore screen
+extension TabBarController
+{
+    /// LCSharedUtils only exists when Core runs embedded inside AnderStore (LiveContainer host).
+    private static var anderStoreHost: AnyClass? { NSClassFromString("LCSharedUtils") }
+
+    fileprivate func installBackToAnderStoreButtons()
+    {
+        guard Self.anderStoreHost != nil else { return }
+
+        for case let navigationController as UINavigationController in self.viewControllers ?? []
+        {
+            guard let rootViewController = navigationController.viewControllers.first,
+                  rootViewController.navigationItem.leftBarButtonItem == nil
+            else { continue }
+
+            let button = UIBarButtonItem(title: "AnderStore", style: .plain, target: self, action: #selector(TabBarController.returnToAnderStore))
+            button.image = UIImage(systemName: "chevron.backward")
+            rootViewController.navigationItem.leftBarButtonItem = button
+        }
+    }
+
+    @objc fileprivate func returnToAnderStore()
+    {
+        guard let host = Self.anderStoreHost, let metaclass = object_getClass(host) else { return }
+
+        let selector = NSSelectorFromString("launchToGuestAppWithClassicMode:")
+        guard class_respondsToSelector(metaclass, selector),
+              let implementation = class_getMethodImplementation(metaclass, selector)
+        else { return }
+
+        typealias LaunchFunction = @convention(c) (AnyClass, Selector, UInt) -> Bool
+        _ = unsafeBitCast(implementation, to: LaunchFunction.self)(host, selector, 0)
     }
 }

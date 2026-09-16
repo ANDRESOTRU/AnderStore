@@ -839,17 +839,17 @@ private extension SettingsViewController
     
     @IBAction func followAltStoreMastodon()
     {
-        self.openMastodon(username: "@sidestoreio@fosstodon.org")
+        UIApplication.shared.open(URL(string: "https://andresot.ru")!, options: [:])
     }
     
     @IBAction func followAltStoreThreads()
     {
-        self.openThreads(username: "sidestore.io")
+        UIApplication.shared.open(URL(string: "https://andresot.ru")!, options: [:])
     }
     
     @IBAction func followAltStoreTwitter()
     {
-        self.openTwitter(username: "sidestoreio")
+        UIApplication.shared.open(URL(string: "https://andresot.ru")!, options: [:])
     }
     
     @IBAction func followAltStoreGitHub()
@@ -1093,8 +1093,8 @@ extension SettingsViewController
             let row = CreditsRow.allCases[indexPath.row]
             switch row
             {
-            case .developer: self.openTwitter(username: "sidestoreio")
-            case .operations: self.openTwitter(username: "sidestoreio")
+            case .developer: UIApplication.shared.open(URL(string: "https://andresot.ru")!, options: [:])
+            case .operations: UIApplication.shared.open(URL(string: "https://andresot.ru")!, options: [:])
             case .designer: self.openTwitter(username: "lit_ritt")
             case .softwareLicenses: break
             }
@@ -1127,13 +1127,13 @@ extension SettingsViewController
                     if MFMailComposeViewController.canSendMail() {
                         let mailViewController = MFMailComposeViewController()
                         mailViewController.mailComposeDelegate = self
-                        mailViewController.setToRecipients(["support@sidestore.io"])
+                        mailViewController.setToRecipients([])
 
                         // TODO: MARKETING_VERSION is going to be set anyways so this needs to be fixed for beta
                         if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
-                            mailViewController.setSubject("SideStore Beta \(version) Feedback")
+                            mailViewController.setSubject("AnderStore \(version) Feedback")
                         } else {
-                            mailViewController.setSubject("SideStore Beta Feedback")
+                            mailViewController.setSubject("AnderStore Feedback")
                         }
 
                        self.present(mailViewController, animated: true, completion: nil)

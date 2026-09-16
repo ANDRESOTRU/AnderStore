@@ -7,3 +7,11 @@
 [submodule "litehook"]
 	path = litehook
 	url = https://github.com/LiveContainer/litehook
+[submodule "Core/Dependencies/minimuxer"]
+	path = Core/Dependencies/minimuxer
+	url = https://github.com/SideStore/minimuxer
+	branch = develop
+[submodule "Core/Dependencies/SideSign"]
+	path = Core/Dependencies/SideSign
+	url = https://github.com/SideStore/SideSign
+	branch = main

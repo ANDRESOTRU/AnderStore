@@ -37,9 +37,9 @@ mv ./tmp/SideStoreSupport.framework Payload/LiveContainer.app/Frameworks
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:Key string LCOpenSideStore" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:DefaultValue bool false" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 
-# download SideStore
+# AnderStore Core (built in the same workflow from ./Core)
 cd tmp
-wget https://github.com/ANDRESOTRU/AnderStore-Core/releases/download/nightly/SideStore.ipa
+cp ../Core/SideStore.ipa ./SideStore.ipa
 unzip SideStore.ipa
 cd ..
 
