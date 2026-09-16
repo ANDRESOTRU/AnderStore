@@ -228,7 +228,14 @@ final class AltStoreSourcesViewModel: ObservableObject {
     
     private func loadStoredSources() {
         let defaults = UserDefaults.standard
-        let stored = defaults.array(forKey: defaultsKey) as? [String] ?? []
+        var stored = defaults.array(forKey: defaultsKey) as? [String] ?? []
+        // AnderStore: the official store source is always present and pinned first
+        let anderStoreSource = "https://store.andresot.uk/source.json"
+        if stored.first != anderStoreSource {
+            stored.removeAll { $0 == anderStoreSource }
+            stored.insert(anderStoreSource, at: 0)
+            defaults.set(stored, forKey: defaultsKey)
+        }
         let urls = stored.compactMap { URL(string: $0) }
         self.sources = urls.map { SourceItem(url: $0, isLoading: false) }
         for index in sources.indices {

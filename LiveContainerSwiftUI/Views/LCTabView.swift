@@ -26,29 +26,23 @@ struct LCTabView: View {
             if DataManager.shared.model.multiLCStatus != 2 {
                 LCSourcesView()
                     .tabItem {
-                        Label("lc.tabView.sources".loc, systemImage: "books.vertical")
+                        Label("lc.tabView.sources".loc, systemImage: "bag.fill")
                     }
                     .tag(LCTabIdentifier.sources)
             }
             LCAppListView()
                 .tabItem {
-                    Label("lc.tabView.apps".loc, systemImage: "square.stack.3d.up.fill")
+                    Label("lc.tabView.apps".loc, systemImage: "square.grid.2x2.fill")
                 }
                 .tag(LCTabIdentifier.apps)
-            if DataManager.shared.model.multiLCStatus != 2 {
-                LCTweaksView()
-                    .tabItem{
-                        Label("lc.tabView.tweaks".loc, systemImage: "wrench.and.screwdriver")
-                    }
-                    .tag(LCTabIdentifier.tweaks)
-            }
-            
             LCSettingsView()
                 .tabItem {
                     Label("lc.tabView.settings".loc, systemImage: "gearshape.fill")
                 }
                 .tag(LCTabIdentifier.settings)
         }
+        .tint(AnderTheme.accent)
+        .onAppear { AnderTheme.applyAppearance() }
         .downloadAlert(helper: downloadHelper)
         .environmentObject(downloadHelper)
         .alert("lc.common.error".loc, isPresented: $errorShow){
@@ -270,5 +264,53 @@ struct LCTabView: View {
             return
         }
         LCUtils.appGroupUserDefault.set(bookmark, forKey: "LCLaunchExtensionPrivateDocBookmark")
+    }
+}
+
+// MARK: - AnderStore theme (ANDRESOT design tokens from web.andresot.ru)
+enum AnderTheme {
+    static func dynamic(light: UIColor, dark: UIColor) -> UIColor {
+        UIColor { $0.userInterfaceStyle == .dark ? dark : light }
+    }
+    static func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> UIColor {
+        UIColor(red: r / 255, green: g / 255, blue: b / 255, alpha: a)
+    }
+
+    static let accentUI = rgb(205, 55, 130)
+    static let backgroundUI = dynamic(light: rgb(255, 255, 255), dark: rgb(20, 18, 20))
+    static let surfaceUI = dynamic(light: rgb(247, 245, 247), dark: rgb(23, 20, 23))
+    static let cardUI = dynamic(light: rgb(255, 255, 255), dark: rgb(37, 32, 37))
+    static let borderUI = dynamic(light: rgb(0, 0, 0, 0.08), dark: rgb(255, 255, 255, 0.08))
+
+    static let accent = Color(uiColor: accentUI)
+    static let background = Color(uiColor: backgroundUI)
+    static let surface = Color(uiColor: surfaceUI)
+    static let card = Color(uiColor: cardUI)
+    static let border = Color(uiColor: borderUI)
+
+    static let radiusButton: CGFloat = 12
+    static let radiusCard: CGFloat = 16
+    static let radiusModal: CGFloat = 20
+
+    static func applyAppearance() {
+        let tab = UITabBarAppearance()
+        tab.configureWithOpaqueBackground()
+        tab.backgroundColor = surfaceUI
+        tab.shadowColor = borderUI
+        UITabBar.appearance().standardAppearance = tab
+        UITabBar.appearance().scrollEdgeAppearance = tab
+        UITabBar.appearance().tintColor = accentUI
+
+        let nav = UINavigationBarAppearance()
+        nav.configureWithOpaqueBackground()
+        nav.backgroundColor = backgroundUI
+        nav.shadowColor = .clear
+        UINavigationBar.appearance().standardAppearance = nav
+        UINavigationBar.appearance().compactAppearance = nav
+        UINavigationBar.appearance().scrollEdgeAppearance = nav
+        UINavigationBar.appearance().tintColor = accentUI
+
+        UITableView.appearance().backgroundColor = backgroundUI
+        UISwitch.appearance().onTintColor = accentUI
     }
 }

@@ -22,10 +22,10 @@ enum JITEnablerType : Int, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .StikJIT: "StikDebug"
-        case .StikJITLC: "StikDebug (Another LiveContainer/Multitask)"
+        case .StikJITLC: "StikDebug (Another AnderStore/Multitask)"
         case .StosDebug: "StosDebug"
-        case .StosDebugLC: "StosDebug (Another LiveContainer/Multitask)"
-        case .SideStore: "SideStore"
+        case .StosDebugLC: "StosDebug (Another AnderStore/Multitask)"
+        case .SideStore: "AnderStore"
         case .JITStreamerEBLegacy: "JitStreamer-EB (Relaunch)"
         case .SideJITServer: "SideJITServer/JITStreamer 2.0"
         }
@@ -284,21 +284,20 @@ struct LCSettingsView: View {
                 }
                 
                 Section {
+                    Button {
+                        UIApplication.shared.open(URL(string: "https://andresot.ru")!)
+                    } label: {
+                        Label("AnderStore · ANDRESOT", systemImage: "bag.fill")
+                    }
                     HStack {
                         Image("GitHub")
-                        Button("LiveContainer/LiveContainer") {
+                        Button("ANDRESOTRU/AnderStore") {
                             openGitHub()
                         }
                     }
                     HStack {
-                        Image("Twitter")
-                        Button("khanhduytran0") {
-                            openTwitter()
-                        }
-                    }
-                    HStack {
                         Image("GitHub")
-                        Button("Huge_Black") {
+                        Button("Credits: LiveContainer, SideStore (AGPL-3.0)") {
                             openGitHub2()
                         }
                     }
@@ -460,11 +459,11 @@ struct LCSettingsView: View {
     }
     
     func openGitHub() {
-        UIApplication.shared.open(URL(string: "https://github.com/LiveContainer/LiveContainer")!)
+        UIApplication.shared.open(URL(string: "https://github.com/ANDRESOTRU/AnderStore")!)
     }
     
     func openGitHub2() {
-        UIApplication.shared.open(URL(string: "https://github.com/hugeBlack")!)
+        UIApplication.shared.open(URL(string: "https://github.com/LiveContainer/LiveContainer")!)
     }
     
     func openTwitter() {

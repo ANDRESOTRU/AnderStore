@@ -10,8 +10,6 @@ mv "$archive_path.xcarchive/Products/Applications" Payload
 mkdir tmp
 mv Payload/LiveContainer.app/Frameworks/SideStoreSupport.framework ./tmp
 
-zip -r "$scheme.ipa" "Payload" -x "._*" -x ".DS_Store" -x "__MACOSX"
-
 mv ./tmp/SideStoreSupport.framework Payload/LiveContainer.app/Frameworks
 
 # put sidestore related keys into Info.plist and settings bundle
@@ -35,13 +33,13 @@ mv ./tmp/SideStoreSupport.framework Payload/LiveContainer.app/Frameworks
 /usr/libexec/PlistBuddy -c "Add :NSUserActivityTypes:1 string ViewAppIntent" ./Payload/LiveContainer.app/Info.plist
 
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:Type string PSToggleSwitchSpecifier" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
-/usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:Title string Open SideStore" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
+/usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:Title string Open AnderStore Core" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:Key string LCOpenSideStore" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:DefaultValue bool false" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 
 # download SideStore
 cd tmp
-wget https://github.com/LiveContainer/SideStore/releases/download/nightly/SideStore.ipa
+wget https://github.com/ANDRESOTRU/AnderStore-Core/releases/download/nightly/SideStore.ipa
 unzip SideStore.ipa
 cd ..
 
@@ -73,4 +71,4 @@ find payloadlc/Payload -type d -name "_CodeSignature" -exec rm -r {} +
 ldid -S.github/sidelc/LiveWidgetExtension_adhoc.xml ./Payload/LiveContainer.app/PlugIns/LiveWidgetExtension.appex/LiveWidgetExtension
 
 # package
-zip -r "$scheme+SideStore.ipa" "Payload" -x "._*" -x ".DS_Store" -x "__MACOSX"
+zip -r "AnderStore.ipa" "Payload" -x "._*" -x ".DS_Store" -x "__MACOSX"

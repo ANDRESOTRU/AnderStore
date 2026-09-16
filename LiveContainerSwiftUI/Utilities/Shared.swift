@@ -53,7 +53,7 @@ struct LCPath {
 }
 
 class SharedModel: ObservableObject {
-    @Published var selectedTab: LCTabIdentifier = .apps
+    @Published var selectedTab: LCTabIdentifier = .sources
     @Published var deepLink: URL?
     
     @Published var isHiddenAppUnlocked = false
