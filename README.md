@@ -1,3 +1,15 @@
+# AnderStore
+
+AnderStore — форк [LiveContainer](https://github.com/LiveContainer/LiveContainer) со встроенным [SideStore](https://github.com/SideStore/SideStore).
+
+- Магазин приложений: `https://store.andresot.uk/source.json`
+- Anisette: `https://anisette.andresot.uk`
+- Сборки: вкладка Releases → `nightly` → `LiveContainer+SideStore.ipa`
+
+Лицензия: AGPL-3.0, как у оригинальных проектов. Все авторские права оригинальных авторов сохранены.
+
+---
+
 <div align="center">
    <img width="217" height="217" src="./screenshots/livecontainer_icon.png" alt="Logo">
 </div>
