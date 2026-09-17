@@ -118,15 +118,17 @@ jobs:
           echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
           echo "COMMIT_MSG=$COMMIT_MSG" >> $GITHUB_ENV
       - name: Nightly Release
-        uses: andelf/nightly-release@5834076edc55cc05975561c9722043f072ac5c26
+        uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with: 
+        with:
+          tag_name: nightly
+          name: AnderStore Nightly
+          prerelease: true
           body: |
-            **Commit:** [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
-            **Message:** ${{ github.event.head_commit.message }}
-            
-            This is a nightly release [created automatically with GitHub Actions workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}).
-          files: |
-            ${{ needs.build.outputs.artifact }}
+            AnderStore — сборка от ${{ env.COMMIT_SHA }}
 
+            **Изменение:** ${{ env.COMMIT_MSG }}
+
+            Установка: https://store.andresot.uk/download
+          files: AnderStore.ipa
