@@ -16,7 +16,7 @@ enum SideBackupError: LocalizedError {
         switch self {
         case .appGroupNotConfigured(let expected):
             return "App Group is not configured. Bundle has no ALTAppGroups entry containing '\(expected)'. " +
-                   "SideBackup was likely not resigned with the SideStore App Group entitlement."
+                   "SideBackup was likely not resigned with the AnderStore App Group entitlement."
         case .appGroupContainerUnresolvable(let group):
             return "Could not resolve container URL for App Group '\(group)'. " +
                    "The provisioning profile may be missing the App Group entitlement."

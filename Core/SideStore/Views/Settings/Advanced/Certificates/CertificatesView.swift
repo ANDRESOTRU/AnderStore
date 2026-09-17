@@ -374,7 +374,7 @@ private struct CreateCertificateSheetView: View {
     var presentingViewController: UIViewController?
     @Binding var isPresented: Bool
 
-    @State private var machineName: String = "SideStore - \(UIDevice.current.name)"
+    @State private var machineName: String = "AnderStore - \(UIDevice.current.name)"
     @State private var selectedCertificateType: CertificateType = .development
 
     private var isPaidWarningVisible: Bool {

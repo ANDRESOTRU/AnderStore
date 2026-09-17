@@ -189,7 +189,7 @@ struct LCTabView: View {
             }
             
             guard let primaryLCTeamId = Bundle.main.infoDictionary?["PrimaryLiveContainerTeamId"] as? String else {
-                print("Unable to find PrimaryLiveContainerTeamId")
+                print("Unable to find PrimaryAnderStoreTeamId")
                 return
             }
             if certificateTeamId != primaryLCTeamId {
@@ -207,7 +207,7 @@ struct LCTabView: View {
         
         if DataManager.shared.model.multiLCStatus == 2 {
             guard let primaryLCTeamId = Bundle.main.infoDictionary?["PrimaryLiveContainerTeamId"] as? String else {
-                print("Unable to find PrimaryLiveContainerTeamId")
+                print("Unable to find PrimaryAnderStoreTeamId")
                 return
             }
             if currentTeamId != primaryLCTeamId {
@@ -604,5 +604,80 @@ struct AnderWelcomeView: View {
             .padding(.bottom, 24)
         }
         .background(AnderTheme.background.ignoresSafeArea())
+    }
+}
+
+// MARK: - About screen (required legal notices: AGPL-3.0 / MIT)
+struct AnderAboutView: View {
+    private struct License: Identifiable {
+        let id = UUID()
+        let project: String
+        let license: String
+        let url: String
+    }
+
+    private let licenses = [
+        License(project: "LiveContainer", license: "AGPL-3.0", url: "https://github.com/LiveContainer/LiveContainer"),
+        License(project: "SideStore", license: "AGPL-3.0", url: "https://github.com/SideStore/SideStore"),
+        License(project: "AltStore", license: "AGPL-3.0", url: "https://github.com/altstoreio/AltStore"),
+    ]
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle().fill(AnderTheme.accent)
+                        Text("A").font(.system(size: 30, weight: .semibold)).foregroundColor(.white)
+                    }
+                    .frame(width: 64, height: 64)
+                    Text("AnderStore").font(.title3.weight(.semibold))
+                    Text(LCUtils.getVersionInfo()).font(.footnote).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .listRowBackground(Color.clear)
+            }
+
+            Section {
+                Button("andresot.ru") {
+                    UIApplication.shared.open(URL(string: "https://andresot.ru")!)
+                }
+                Button("store.andresot.uk") {
+                    UIApplication.shared.open(URL(string: "https://store.andresot.uk")!)
+                }
+            } header: {
+                Text("ANDRESOT")
+            }
+
+            Section {
+                Button("github.com/ANDRESOTRU/AnderStore") {
+                    UIApplication.shared.open(URL(string: "https://github.com/ANDRESOTRU/AnderStore")!)
+                }
+            } header: {
+                Text("lc.about.sourceCode".loc)
+            } footer: {
+                Text("lc.about.sourceCodeDesc".loc)
+            }
+
+            Section {
+                ForEach(licenses) { item in
+                    Button {
+                        UIApplication.shared.open(URL(string: item.url)!)
+                    } label: {
+                        HStack {
+                            Text(item.project)
+                            Spacer()
+                            Text(item.license).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text("lc.about.licenses".loc)
+            } footer: {
+                Text("lc.about.licensesDesc".loc)
+            }
+        }
+        .navigationTitle("lc.settings.aboutApp".loc)
     }
 }

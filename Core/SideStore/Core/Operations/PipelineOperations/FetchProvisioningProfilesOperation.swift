@@ -309,7 +309,7 @@ private extension FetchProvisioningProfilesOperation{
         }
         
         if targetAppBundle.isAltStoreApp {
-            verboseLog("[FetchProvisioningProfiles] Application groups before modifying for SideStore: \(applicationGroups)")
+            verboseLog("[FetchProvisioningProfiles] Application groups before modifying for AnderStore: \(applicationGroups)")
             
             // Remove app groups that contain AltStore since they can be problematic (cause SideStore to expire early)
             for (index, group) in applicationGroups.enumerated() {
@@ -364,7 +364,7 @@ private extension FetchProvisioningProfilesOperation{
                     groups.append(group)
                 } else {
                     // Not all characters are allowed in group names, so we replace periods with spaces (like Apple does).
-                    let name = "SideStore " + groupIdentifier.replacingOccurrences(of: ".", with: " ")
+                    let name = "AnderStore " + groupIdentifier.replacingOccurrences(of: ".", with: " ")
                     do {
                         let group = try await DeveloperPortalProxy.shared.addAppGroup(name: name, groupIdentifier: adjustedGroupIdentifier, team: team)
                         self.context.sharedContext?.appendAppGroup(group)

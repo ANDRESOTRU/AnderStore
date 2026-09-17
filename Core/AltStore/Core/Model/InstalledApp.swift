@@ -303,7 +303,7 @@ public extension InstalledApp
     class func fetchAltStore(in context: NSManagedObjectContext) -> InstalledApp?
     {
         let predicate = NSPredicate(format: "%K == %@", #keyPath(InstalledApp.bundleIdentifier), StoreApp.altstoreAppID)
-        debugLog("Fetch 'AltStore' Predicate: \(String(describing: predicate))")
+        debugLog("Fetch 'AnderStore' Predicate: \(String(describing: predicate))")
         let altStore = InstalledApp.first(satisfying: predicate, in: context)
         return altStore
     }

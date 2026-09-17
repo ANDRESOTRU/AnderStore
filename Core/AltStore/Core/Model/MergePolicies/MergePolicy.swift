@@ -212,7 +212,7 @@ extension MergePolicy{
                    let secondaryAppVersion = conflictingAppVersions.first(where: { $0 != primaryAppVersion })
                 {
                     secondaryAppVersion.managedObjectContext?.delete(secondaryAppVersion)
-                    debugLog("[SideStore] Resolving AppVersion context-level conflict. Most likely due to migrating from pre-AppVersion model version. \(primaryAppVersion)")
+                    debugLog("[AnderStore] Resolving AppVersion context-level conflict. Most likely due to migrating from pre-AppVersion model version. \(primaryAppVersion)")
                 }
                 
             default:
@@ -395,7 +395,7 @@ extension MergePolicy{
                 }
                 catch
                 {
-                    let nsError = error.serialized(withFailure: NSLocalizedString("SideStore's database could not be saved.", comment: ""))
+                    let nsError = error.serialized(withFailure: NSLocalizedString("AnderStore's database could not be saved.", comment: ""))
                     throw nsError
                 }
                 

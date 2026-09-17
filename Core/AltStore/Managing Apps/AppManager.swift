@@ -217,7 +217,7 @@ final class AppManager: ObservableObject, @unchecked Sendable
             guard requiredActiveSlots > availableActiveApps else { return completion(.success(())) }
 
             guard let presentingViewController else {
-                let failureReason = String(format: NSLocalizedString("SideStore needs to deactivate another app before installing %@.", comment: ""), appBundle.name)
+                let failureReason = String(format: NSLocalizedString("AnderStore needs to deactivate another app before installing %@.", comment: ""), appBundle.name)
                 return completion(.failure(OperationError.forbidden(failureReason: failureReason)))
             }
             
@@ -318,7 +318,7 @@ final class AppManager: ObservableObject, @unchecked Sendable
     {
         let (sourceName, sourceID) = await $source.perform { ($0.name, $0.identifier) }
         guard sourceID != Source.altStoreIdentifier else {
-            throw OperationError.forbidden(failureReason: NSLocalizedString("The default SideStore source cannot be removed.", comment: ""))
+            throw OperationError.forbidden(failureReason: NSLocalizedString("The default AnderStore source cannot be removed.", comment: ""))
         }
         
         let title = String(format: NSLocalizedString("Are you sure you want to remove the source “%@”?", comment: ""), sourceName)

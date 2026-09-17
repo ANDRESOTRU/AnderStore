@@ -81,7 +81,7 @@ struct LCEntitlementView : View {
                         .font(.system(.subheadline, design: .monospaced))
                 }
             }
-            .navigationTitle(isLiveProcess ? "LiveProcess Entitlements" : "LiveContainer Entitlements")
+            .navigationTitle(isLiveProcess ? "LiveProcess Entitlements" : "AnderStore Entitlements")
             .navigationBarTitleDisplayMode(.inline)
         } else {
             Text("lc.common.loading".loc)
@@ -212,7 +212,7 @@ struct LCJITLessDiagnoseView : View {
                         Text("lc.jitlessDiag.store".loc)
                         Spacer()
                         if store == .AltStore {
-                            Text("AltStore")
+                            Text("lc.jitlessDiag.otherStore".loc)
                                 .foregroundStyle(.gray)
                         } else if store == .SideStore {
                             Text("AnderStore")
@@ -229,7 +229,7 @@ struct LCJITLessDiagnoseView : View {
                     NavigationLink {
                         LCEntitlementView(isLiveProcess: false)
                     } label: {
-                        Text("LiveContainer Entitlements".loc)
+                        Text("AnderStore Entitlements".loc)
                     }
                     if sharedModel.multiLCStatus == 0 {
                         NavigationLink {

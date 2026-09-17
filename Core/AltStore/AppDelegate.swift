@@ -225,7 +225,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             }
             catch
             {
-                debugLog("[SideStore] Failed to purge logged errors before \(midnightOneMonthAgo). \(error)")
+                debugLog("[AnderStore] Failed to purge logged errors before \(midnightOneMonthAgo). \(error)")
             }
         }
              
@@ -412,7 +412,7 @@ extension AppDelegate
             
             let content = UNMutableNotificationContent()
             content.title = NSLocalizedString("App Refresh Tip", comment: "")
-            content.body = NSLocalizedString("The more you open SideStore, the more chances it's given to refresh apps in the background.", comment: "")
+            content.body = NSLocalizedString("The more you open AnderStore, the more chances it's given to refresh apps in the background.", comment: "")
             
             let request = UNNotificationRequest(identifier: "background-refresh-reminder5", content: content, trigger: trigger)
             UNUserNotificationCenter.current().add(request)
@@ -546,7 +546,7 @@ private extension AppDelegate
                     }
                     else
                     {
-                        content.title = NSLocalizedString("SideStore News", comment: "")
+                        content.title = NSLocalizedString("AnderStore News", comment: "")
                     }
                     
                     content.body = newsItem.title

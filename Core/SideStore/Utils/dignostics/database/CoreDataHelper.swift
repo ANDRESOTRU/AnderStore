@@ -24,7 +24,7 @@ class CoreDataHelper{
 
         // Locate the bundle containing the Core Data model
         guard let bundle = Bundle(identifier: COREDATA_BUNDLE_ID) else {
-            let errorDescription = "AltStoreCore bundle not found"
+            let errorDescription = "AnderStoreCore bundle not found"
             throw getCoreDataError(code: 1, localizedDescription: errorDescription)
         }
         
@@ -32,7 +32,7 @@ class CoreDataHelper{
         guard let modelURL = bundle.url(forResource: STORE_XCMODELD_NAME, withExtension: "momd"),
               let _ = NSManagedObjectModel(contentsOf: modelURL) else {
             
-            let errorDescription = "Failed to load model \(STORE_XCMODELD_NAME) from AltStoreCore bundle"
+            let errorDescription = "Failed to load model \(STORE_XCMODELD_NAME) from AnderStoreCore bundle"
             throw getCoreDataError(code: 2, localizedDescription: errorDescription)
         }
         

@@ -76,7 +76,7 @@ public enum OperationError: LocalizedError, CustomNSError, Sendable, Equatable {
         case .notAuthenticated:
             return "You are not signed in."
         case .unknownUDID:
-            return "SideStore could not determine this device's UDID. Please replace your pairing using iloader."
+            return "AnderStore could not determine this device's UDID. Please replace your pairing using iloader."
         case .invalidApp(let reason):
             if let reason, !reason.isEmpty {
                 return "The app is in an invalid format: \(reason)"
@@ -91,18 +91,18 @@ public enum OperationError: LocalizedError, CustomNSError, Sendable, Equatable {
         case .maximumAppIDLimitReached:
             return "Cannot register more than 10 App IDs within a 7 day period."
         case .noSources:
-            return "There are no SideStore sources."
+            return "There are no AnderStore sources."
         case .noInstalledApps:
             return "There are no active sideloaded apps to refresh."
         case .openAppFailed(let name):
             let app = name ?? "The app"
-            return "SideStore was denied permission to launch \(app)."
+            return "AnderStore was denied permission to launch \(app)."
         case .missingAppGroup:
-            return "SideStore's shared app group could not be accessed."
+            return "AnderStore's shared app group could not be accessed."
         case .forbidden(let reason, _, _):
             return reason ?? "The operation is forbidden."
         case .sourceNotAdded(let name):
-            return "The source “\(name)” is not added to SideStore."
+            return "The source “\(name)” is not added to AnderStore."
         case .appNotFound(let name):
             let app = name ?? "The app"
             return "\(app) could not be found."
@@ -146,9 +146,9 @@ public enum OperationError: LocalizedError, CustomNSError, Sendable, Equatable {
             return "You do not appear to be connected to VPN.\n\nPlease make sure LocalDevVPN is connected and running! If the issue persists, replace your pairing with iloader or try restarting the device."
         case .noDevice(let reason):
             if let reason, !reason.isEmpty {
-                return "SideStore is unable to reach the device endpoint:\n\(reason)\n\nPlease check your Connection Configuration in Settings."
+                return "AnderStore is unable to reach the device endpoint:\n\(reason)\n\nPlease check your Connection Configuration in Settings."
             }
-            return "SideStore is unable to reach the device endpoint.\n\nPlease check your Connection Configuration in Settings to ensure the IP and endpoint are correct."
+            return "AnderStore is unable to reach the device endpoint.\n\nPlease check your Connection Configuration in Settings to ensure the IP and endpoint are correct."
         case .notReachable(let reason):
             return reason.isEmpty ? "Device is not reachable at the specified IP or Endpoint." : reason
         case .invalidPairingFile(let reason):
@@ -159,7 +159,7 @@ public enum OperationError: LocalizedError, CustomNSError, Sendable, Equatable {
         case .minimuxerNotStarted:
             return "Minimuxer has not been started yet.\n\nPlease complete pairing or start minimuxer before performing operations."
         case .pairingNotComplete:
-            return "Pairing Required:\nWithout a valid pairing file, SideStore operations cannot connect to your device. Please pair your device or import a valid pairing file."
+            return "Pairing Required:\nWithout a valid pairing file, AnderStore operations cannot connect to your device. Please pair your device or import a valid pairing file."
         case .missingAppBundle:
             return "The app bundle could not be found."
         case .missingInfoPlist:

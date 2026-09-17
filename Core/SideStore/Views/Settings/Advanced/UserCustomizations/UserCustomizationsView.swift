@@ -447,7 +447,7 @@ struct UserCustomizationsView: View {
             }
             SwiftUI.Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Changing the EMProxy setting requires restarting SideStore. If canceled, changes will not be saved.")
+            Text("Changing the EMProxy setting requires restarting AnderStore. If canceled, changes will not be saved.")
         }
         .alert("Restart Required", isPresented: $showBackendRestartConfirmation) {
             SwiftUI.Button("Restart Now", role: .destructive) {
@@ -463,7 +463,7 @@ struct UserCustomizationsView: View {
                 pendingBackendOption = nil
             }
         } message: {
-            Text("Changing the Minimuxer backend requires restarting SideStore. If canceled, changes will not be saved.")
+            Text("Changing the Minimuxer backend requires restarting AnderStore. If canceled, changes will not be saved.")
         }
         .alert(pendingPreferIPAOngoing ? "Prefer Resigned IPA" : "Prefer App Bundle", isPresented: $showPreferIPAToggleAlert) {
             SwiftUI.Button("Switch") {
@@ -516,7 +516,7 @@ struct UserCustomizationsView: View {
     private func exportWireGuardConfig() {
         guard let top = UIApplication.shared.topViewController() else { return }
         guard let url = Bundle.main.url(forResource: "SideStore", withExtension: "conf") else {
-            let toastView = ToastView(text: NSLocalizedString("SideStore.conf missing!", comment: ""), detailText: "Unable to locate SideStore.conf in bundle resources.")
+            let toastView = ToastView(text: NSLocalizedString("AnderStore.conf missing!", comment: ""), detailText: "Unable to locate SideStore.conf in bundle resources.")
             toastView.show(in: top)
             return
         }
@@ -532,7 +532,7 @@ struct UserCustomizationsView: View {
         guard let top = UIApplication.shared.topViewController() else { return }
         let alertController = UIAlertController(
             title: NSLocalizedString("Reset adi.pb", comment: ""),
-            message: NSLocalizedString("This will sign you out of Apple ID in SideStore and clear the provisioned adi.pb data from your Keychain. Your active signing certificate will be preserved.", comment: ""),
+            message: NSLocalizedString("This will sign you out of Apple ID in AnderStore and clear the provisioned adi.pb data from your Keychain. Your active signing certificate will be preserved.", comment: ""),
             preferredStyle: .alert
         )
         let contentVC = ResetAdiAlertViewController()

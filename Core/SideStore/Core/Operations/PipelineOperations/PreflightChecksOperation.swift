@@ -77,7 +77,7 @@ final class PreflightChecksOperation: BasePipelineOperation<StandaloneOperationC
 
             guard let targetID = incomingTargetID, targetID != activeEffectiveID && targetID != activeResignedID else { continue }
 
-            debugLog("[PreflightChecksOperation] SideStore bundle ID mismatch detected: target='\(targetID)', active='\(activeEffectiveID)'")
+            debugLog("[PreflightChecksOperation] AnderStore bundle ID mismatch detected: target='\(targetID)', active='\(activeEffectiveID)'")
 
             switch operation {
                 case .resign, .install:
@@ -91,7 +91,7 @@ final class PreflightChecksOperation: BasePipelineOperation<StandaloneOperationC
                     )
 
                     if !shouldContinue {
-                        debugLog("[PreflightChecksOperation] SideStore bundle ID mismatch prompt cancelled by user. Throwing OperationError.cancelled.")
+                        debugLog("[PreflightChecksOperation] AnderStore bundle ID mismatch prompt cancelled by user. Throwing OperationError.cancelled.")
                         throw OperationError.cancelled
                     }
 

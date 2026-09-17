@@ -45,7 +45,7 @@ struct BackupErrorLocalizer {
             if let appGroup = appGroup {
                 return String(format: NSLocalizedString("The app group “%@” could not be found.", comment: ""), appGroup)
             } else {
-                return NSLocalizedString("The AltStore app group could not be found.", comment: "")
+                return NSLocalizedString("The AnderStore app group could not be found.", comment: "")
             }
         case .randomError:
             return NSLocalizedString("A random error occurred.", comment: "")

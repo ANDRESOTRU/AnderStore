@@ -353,7 +353,7 @@ extension ErrorLogViewController
                 }
                 catch
                 {
-                    debugLog("[SideStore] Failed to delete LoggedError \(loggedError.objectID): \(error)")
+                    debugLog("[AnderStore] Failed to delete LoggedError \(loggedError.objectID): \(error)")
                     DispatchQueue.main.async {
                         completion(false)
                     }

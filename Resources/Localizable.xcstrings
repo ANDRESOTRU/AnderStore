@@ -16170,7 +16170,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Configure o modo JIT-Less (requer AnderStore/AltStore) nas configurações para usar o AnderStore.\n\n**Verifique a página de diagnóstico do modo JIT-Less nas configurações se você encontrar problemas ativando-o.**\n\nPressione o sinal de '+' para adicionar e instalar aplicativos.\n\nPressione e segure o aplicativo para alterar sua configuração, corrigir erros e adicionar aplicativos à tela de início."
+            "value" : "Configure o modo JIT-Less (requer AnderStore/AnderStore) nas configurações para usar o AnderStore.\n\n**Verifique a página de diagnóstico do modo JIT-Less nas configurações se você encontrar problemas ativando-o.**\n\nPressione o sinal de '+' para adicionar e instalar aplicativos.\n\nPressione e segure o aplicativo para alterar sua configuração, corrigir erros e adicionar aplicativos à tela de início."
           }
         },
         "ru" : {
@@ -22407,97 +22407,97 @@
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "لأستعمال وضع بدون-JIT دون AltStore/AnderStore، عليك أستيراد الشهادة الذي تم توقيع AnderStore بها، هل تود المتابعة؟"
+            "value" : "لأستعمال وضع بدون-JIT دون AnderStore، عليك أستيراد الشهادة الذي تم توقيع AnderStore بها، هل تود المتابعة؟"
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wenn Sie den JITLess-Modus ohne AltStore/AnderStore nutzen möchten, müssen Sie das Zertifikat importieren, mit dem AnderStore signiert wurde. Fortfahren?"
+            "value" : "Wenn Sie den JITLess-Modus ohne AnderStore nutzen möchten, müssen Sie das Zertifikat importieren, mit dem AnderStore signiert wurde. Fortfahren?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "To use JITLess mode without AltStore/AnderStore, you have to import the certificate used to sign AnderStore. Continue?"
+            "value" : "To use JITLess mode without AnderStore, you have to import the certificate used to sign AnderStore. Continue?"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Para usar el modo JITLess sin AltStore/AnderStore, debes importar el certificado usado para firmar AnderStore. ¿Continuar?"
+            "value" : "Para usar el modo JITLess sin AnderStore, debes importar el certificado usado para firmar AnderStore. ¿Continuar?"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pour utiliser le mode sans JIT sans AltStore/AnderStore, vous devez importer le certificat utilisé pour signer AnderStore. Poursuivre ?"
+            "value" : "Pour utiliser le mode sans JIT sans AnderStore, vous devez importer le certificat utilisé pour signer AnderStore. Poursuivre ?"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Per utilizzare la modalità JITLess senza AltStore/AnderStore, devi importare il certificato utilizzato per firmare AnderStore. Vuoi Continuare?"
+            "value" : "Per utilizzare la modalità JITLess senza AnderStore, devi importare il certificato utilizzato per firmare AnderStore. Vuoi Continuare?"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AltStore/AnderStoreなしでJITレスモードを使用するには、AnderStoreに署名するための証明書をインポートする必要があります。続けますか？"
+            "value" : "AnderStoreなしでJITレスモードを使用するには、AnderStoreに署名するための証明書をインポートする必要があります。続けますか？"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AltStore, AnderStore 없이 JIT-Less 모드를 사용하려면, AnderStore를 설치할 때 사용한 동일한 인증서가 필요합니다."
+            "value" : "AnderStore, AnderStore 없이 JIT-Less 모드를 사용하려면, AnderStore를 설치할 때 사용한 동일한 인증서가 필요합니다."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aby używać trybu JIT-Less bez AltStore czy AnderStore, trzeba zaimportować certyfikat użyty do podpisania AnderStore. Czy chcesz kontynuować?"
+            "value" : "Aby używać trybu JIT-Less bez AnderStore czy AnderStore, trzeba zaimportować certyfikat użyty do podpisania AnderStore. Czy chcesz kontynuować?"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Para usar o modo JIT-Less sem a AltStore/AnderStore, você deve importar, especificamente, o certificado usado para assinar o AnderStore. Deseja continuar?"
+            "value" : "Para usar o modo JIT-Less sem a AnderStore, você deve importar, especificamente, o certificado usado para assinar o AnderStore. Deseja continuar?"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Чтобы включить режим JIT-less без AltStore/AnderStore, вам потребуется указать сертификат, которым вы подписали AnderStore. Продолжить?"
+            "value" : "Чтобы включить режим JIT-less без AnderStore, вам потребуется указать сертификат, которым вы подписали AnderStore. Продолжить?"
           }
         },
         "sv" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "För att använda JITLess utan AltStore/AnderStore måste du importera certifikatet som används för att signera AnderStore. Vill du fortsätta?"
+            "value" : "För att använda JITLess utan AnderStore måste du importera certifikatet som används för att signera AnderStore. Vill du fortsätta?"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AltStore/AnderStore olmadan JITLess modunu kullanmak için, AnderStore'ı imzalamak için kullanılan sertifikayı içe aktarmanız gerekir. Devam etmek istiyor musunuz?"
+            "value" : "AnderStore olmadan JITLess modunu kullanmak için, AnderStore'ı imzalamak için kullanılan sertifikayı içe aktarmanız gerekir. Devam etmek istiyor musunuz?"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Để dùng chức năng JITLess không cần AltStore/AnderStore, bạn phải nhập chứng chỉ được dùng để ký AnderStore. Tiếp tục?"
+            "value" : "Để dùng chức năng JITLess không cần AnderStore, bạn phải nhập chứng chỉ được dùng để ký AnderStore. Tiếp tục?"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要不通过AnderStore/AltStore使用免JIT模式，你需要导入用于签名AnderStore的证书。要继续吗？"
+            "value" : "要不通过AnderStore/AnderStore使用免JIT模式，你需要导入用于签名AnderStore的证书。要继续吗？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "若不透過AnderStore/AltStore使用免JIT模式，你需要匯入用於簽署AnderStore的證書。要繼續嗎？"
+            "value" : "若不透過AnderStore/AnderStore使用免JIT模式，你需要匯入用於簽署AnderStore的證書。要繼續嗎？"
           }
         }
       }
@@ -28062,97 +28062,97 @@
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "طريقة التثبيت غير مدعومة. الرجاء أستعمال AltStore أو AnderStore لأعداد هذه الميزة."
+            "value" : "طريقة التثبيت غير مدعومة. الرجاء أستعمال AnderStore أو AnderStore لأعداد هذه الميزة."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nicht unterstützte Installationsmethode. Bitte verwenden Sie AltStore oder AnderStore, um diese Funktion einzurichten."
+            "value" : "Nicht unterstützte Installationsmethode. Bitte verwenden Sie AnderStore oder AnderStore, um diese Funktion einzurichten."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unsupported installation method. Please use AltStore or AnderStore to setup this feature."
+            "value" : "Unsupported installation method. Please use AnderStore to setup this feature."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Método de instalación no compatible. Usa AltStore o AnderStore para configurar esta función."
+            "value" : "Método de instalación no compatible. Usa AnderStore o AnderStore para configurar esta función."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Méthode d'installation non prise en charge. Veuillez utiliser AltStore ou AnderStore pour configurer cette fonctionnalité."
+            "value" : "Méthode d'installation non prise en charge. Veuillez utiliser AnderStore ou AnderStore pour configurer cette fonctionnalité."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Metodo di installazione non supportato. Si prega di utilizzare AltStore o AnderStore per configurare questa funzione."
+            "value" : "Metodo di installazione non supportato. Si prega di utilizzare AnderStore o AnderStore per configurare questa funzione."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "対応していないインストール方法です。この機能を設定するには、AltStoreまたはAnderStoreを使用してください。"
+            "value" : "対応していないインストール方法です。この機能を設定するには、AnderStoreまたはAnderStoreを使用してください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "지원하지 않는 방법입니다. 해당 방법을 사용하려면 AltStore 또는 AnderStore를 사용해주세요."
+            "value" : "지원하지 않는 방법입니다. 해당 방법을 사용하려면 AnderStore 또는 AnderStore를 사용해주세요."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Metoda instalacji nie jest wspierana. Proszę użyć AltStore lub AnderStore, aby skonfigurować tę funkcję."
+            "value" : "Metoda instalacji nie jest wspierana. Proszę użyć AnderStore lub AnderStore, aby skonfigurować tę funkcję."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Método de instalação não suportado. Por favor, use AltStore ou AnderStore para configurar este recurso."
+            "value" : "Método de instalação não suportado. Por favor, use AnderStore ou AnderStore para configurar este recurso."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Неподдерживаемый способ установки. Используйте AltStore или AnderStore для установки данной функции."
+            "value" : "Неподдерживаемый способ установки. Используйте AnderStore для установки данной функции."
           }
         },
         "sv" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Installationsmetod stöds inte. Använd AltStore eller AnderStore för att använda denna funktion."
+            "value" : "Installationsmetod stöds inte. Använd AnderStore eller AnderStore för att använda denna funktion."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Desteklenmeyen kurulum yöntemi. Bu özelliği kurmak için lütfen AltStore veya AnderStore kullanın."
+            "value" : "Desteklenmeyen kurulum yöntemi. Bu özelliği kurmak için lütfen AnderStore veya AnderStore kullanın."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Không hỗ trợ phương pháp cài đặt này. Vui lòng dùng AltStore hay AnderStore để thiết lập tính năng này."
+            "value" : "Không hỗ trợ phương pháp cài đặt này. Vui lòng dùng AnderStore hay AnderStore để thiết lập tính năng này."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装方式不受支持。请使用AnderStore或AltStore安装来使用此功能。"
+            "value" : "安装方式不受支持。请使用AnderStore或AnderStore安装来使用此功能。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安裝方式不受支援。請使用AnderStore或AltStore安裝來使用此功能。"
+            "value" : "安裝方式不受支援。請使用AnderStore或AnderStore安裝來使用此功能。"
           }
         }
       }
@@ -33198,6 +33198,108 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Начать"
+          }
+        }
+      }
+    },
+    "lc.settings.aboutApp" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About AnderStore"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "О программе"
+          }
+        }
+      }
+    },
+    "lc.about.sourceCode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source code"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Исходный код"
+          }
+        }
+      }
+    },
+    "lc.about.sourceCodeDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore is open source and distributed under the AGPL-3.0 license."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore — открытый проект, распространяется по лицензии AGPL-3.0."
+          }
+        }
+      }
+    },
+    "lc.about.licenses" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Licenses"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лицензии"
+          }
+        }
+      }
+    },
+    "lc.about.licensesDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore is built on these open-source projects. Their copyrights belong to their authors."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore создан на основе этих открытых проектов. Авторские права принадлежат их авторам."
+          }
+        }
+      }
+    },
+    "lc.jitlessDiag.otherStore" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other store"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Другой магазин"
           }
         }
       }

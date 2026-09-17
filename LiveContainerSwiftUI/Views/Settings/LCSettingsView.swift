@@ -284,22 +284,15 @@ struct LCSettingsView: View {
                 }
                 
                 Section {
-                    Button {
-                        UIApplication.shared.open(URL(string: "https://andresot.ru")!)
+                    NavigationLink {
+                        AnderAboutView()
                     } label: {
-                        Label("AnderStore · ANDRESOT", systemImage: "bag.fill")
+                        Label("lc.settings.aboutApp".loc, systemImage: "info.circle")
                     }
-                    HStack {
-                        Image("GitHub")
-                        Button("ANDRESOTRU/AnderStore") {
-                            openGitHub()
-                        }
-                    }
-                    HStack {
-                        Image("GitHub")
-                        Button("Credits: LiveContainer, SideStore (AGPL-3.0)") {
-                            openGitHub2()
-                        }
+                    Button {
+                        UIApplication.shared.open(URL(string: "https://store.andresot.uk/help")!)
+                    } label: {
+                        Label("lc.account.help".loc, systemImage: "questionmark.circle")
                     }
                 } header: {
                     Text("lc.settings.about".loc)
@@ -351,7 +344,7 @@ struct LCSettingsView: View {
                         Button {
                             Task { await nukeSideStore() }
                         } label: {
-                            Text("Nuke SideStore")
+                            Text("Nuke AnderStore")
                         }
                         Button {
                             exportMainBundle()

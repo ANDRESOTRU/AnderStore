@@ -88,7 +88,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate
             }
             catch
             {
-                debugLog("[SideStore] Failed to purge logged errors before \(midnightOneMonthAgo). \(error)")
+                debugLog("[AnderStore] Failed to purge logged errors before \(midnightOneMonthAgo). \(error)")
             }
         }
         
@@ -114,7 +114,7 @@ private extension SceneDelegate
             // Copy the shared .ipa out of its security-scoped location into a
             // temporary directory we own, so it stays readable while signing.
             if !context.url.startAccessingSecurityScopedResource() {
-                debugLog("[SideStore] Failed to access security-scoped resource for imported IPA")
+                debugLog("[AnderStore] Failed to access security-scoped resource for imported IPA")
                 return
             }
             defer { context.url.stopAccessingSecurityScopedResource() }
@@ -123,7 +123,7 @@ private extension SceneDelegate
             do {
                 try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true, attributes: nil)
             } catch {
-                debugLog("[SideStore] Failed to create temp directory for imported IPA: \(error)")
+                debugLog("[AnderStore] Failed to create temp directory for imported IPA: \(error)")
                 return
             }
 
@@ -132,7 +132,7 @@ private extension SceneDelegate
             do {
                 try FileManager.default.copyItem(at: context.url, to: ipa)
             } catch {
-                debugLog("[SideStore] Failed to copy imported IPA: \(error)")
+                debugLog("[AnderStore] Failed to copy imported IPA: \(error)")
                 return
             }
 

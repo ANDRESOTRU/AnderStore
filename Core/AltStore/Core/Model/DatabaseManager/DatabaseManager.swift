@@ -377,7 +377,7 @@ public class DatabaseManager: @unchecked Sendable
                         }
                         catch
                         {
-                            debugLog("Failed to copy SideStore app bundle to its proper location. \(error)")
+                            debugLog("Failed to copy AnderStore app bundle to its proper location. \(error)")
                         }
                     }
                 }

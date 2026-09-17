@@ -65,8 +65,8 @@ final class LaunchViewController: UIViewController {
 
     @MainActor
     func displayError(_ msg: String) {
-        debugLog("[SideStore] \(msg)")
-        let alert = UIAlertController(title: "Error launching SideStore", message: msg, preferredStyle: .alert)
+        debugLog("[AnderStore] \(msg)")
+        let alert = UIAlertController(title: "Error launching AnderStore", message: msg, preferredStyle: .alert)
         self.present(alert, animated: true)
     }
     
@@ -88,7 +88,7 @@ final class LaunchViewController: UIViewController {
     @MainActor
     func handleLaunchError(_ error: Error, retryCallback: (() async -> Void)? = nil) {
         do { throw error } catch let error as NSError {
-            let title = error.userInfo[NSLocalizedFailureErrorKey] as? String ?? NSLocalizedString("Unable to Launch SideStore", comment: "")
+            let title = error.userInfo[NSLocalizedFailureErrorKey] as? String ?? NSLocalizedString("Unable to Launch AnderStore", comment: "")
             let desc = ([error.debugDescription] + error.underlyingErrors.map { ($0 as NSError).debugDescription }).joined(separator: "\n\n")
             let alert = UIAlertController(title: title, message: desc, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: NSLocalizedString("Retry", comment: ""), style: .default) { _ in
@@ -169,7 +169,7 @@ final class LaunchViewController: UIViewController {
     func updateKnownSources() {
         AppManager.shared.updateKnownSources { result in
             switch result {
-            case .failure(let error): debugLog("[SideStore] Failed to update known sources: \(error)")
+            case .failure(let error): debugLog("[AnderStore] Failed to update known sources: \(error)")
             case .success((_, let blockedSources)):
                 DatabaseManager.shared.persistentContainer.performBackgroundTask { context in
                     let blockedSourceIDs = Set(blockedSources.lazy.map { $0.identifier })

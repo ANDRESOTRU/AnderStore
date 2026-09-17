@@ -618,7 +618,7 @@ private extension MyAppsViewController
         }
         catch
         {
-            debugLog("[SideStore] Failed to fetch updates: \(error)")
+            debugLog("[AnderStore] Failed to fetch updates: \(error)")
         }
     }
 }
@@ -1235,7 +1235,7 @@ private extension MyAppsViewController
         let appName = installedApp.name
         let title = String(format: NSLocalizedString("Delete “%@”?", comment: ""), appName)
         
-        let message = String(format: NSLocalizedString("This will remove “%@” from SideStore and erase any backup data for this app.", comment: ""), appName)
+        let message = String(format: NSLocalizedString("This will remove “%@” from AnderStore and erase any backup data for this app.", comment: ""), appName)
         
         let contentVC = DeleteAppAlertViewController()
         
@@ -1314,7 +1314,7 @@ private extension MyAppsViewController
     
     func remove(_ installedApp: InstalledApp)
     {
-        let title = String(format: NSLocalizedString("Remove “%@” from SideStore?", comment: ""), installedApp.name)
+        let title = String(format: NSLocalizedString("Remove “%@” from AnderStore?", comment: ""), installedApp.name)
         let message: String
         
         if UserDefaults.standard.isLegacyDeactivationSupported
@@ -1349,7 +1349,7 @@ private extension MyAppsViewController
         debugLog("[UI] User clicked 'Back Up' for app: \(installedApp.bundleIdentifier)")
         Task { @MainActor in
             let title = NSLocalizedString("Start Backup?", comment: "")
-            let message = NSLocalizedString("This will replace any previous backups. Please leave SideStore open until the backup is complete.", comment: "")
+            let message = NSLocalizedString("This will replace any previous backups. Please leave AnderStore open until the backup is complete.", comment: "")
 
             let alertController = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
             alertController.addAction(.cancel)
@@ -1687,7 +1687,7 @@ private extension MyAppsViewController
                         }
                         catch
                         {
-                            debugLog("[SideStore] Failed to assign error \(sanitizedError.localizedErrorCode) to source \(sourceID). \(error)")
+                            debugLog("[AnderStore] Failed to assign error \(sanitizedError.localizedErrorCode) to source \(sourceID). \(error)")
                         }
                     }
                     

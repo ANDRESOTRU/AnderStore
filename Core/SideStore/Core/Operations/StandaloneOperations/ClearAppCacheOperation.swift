@@ -42,7 +42,7 @@ class ClearAppCacheOperation: BaseStandaloneOperation<StandaloneOperationContext
     private let coordinatorQueue = OperationQueue()
     
     override init(context: StandaloneOperationContext) throws {
-        self.coordinatorQueue.name = "AltStore - ClearAppCacheOperation Queue"
+        self.coordinatorQueue.name = "AnderStore - ClearAppCacheOperation Queue"
         try super.init(context: context)
     }
     

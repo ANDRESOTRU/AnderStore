@@ -78,7 +78,7 @@ final class StageBackupAppOperation: BasePipelineOperation<InstallAppOperationCo
 
             let installedAppUTI = [
                 "UTTypeConformsTo": [],
-                "UTTypeDescription": "SideStore Backup App",
+                "UTTypeDescription": "AnderStore Backup App",
                 "UTTypeIconFiles": [],
                 "UTTypeIdentifier": targetApp.installedBackupAppUTI,
                 "UTTypeTagSpecification": [:]
