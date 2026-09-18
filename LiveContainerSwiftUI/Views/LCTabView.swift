@@ -382,7 +382,8 @@ enum AnderAccountAPI {
     }
 
     static var isAvailable: Bool {
-        guard let (bridge, selector, implementation) = method("isAvailable") else { return false }
+        guard let found = method("isAvailable") else { return false }
+        let (bridge, selector, implementation) = found
         typealias Function = @convention(c) (AnyClass, Selector) -> Bool
         return unsafeBitCast(implementation, to: Function.self)(bridge, selector)
     }
@@ -391,7 +392,8 @@ enum AnderAccountAPI {
     static func signIn(appleID: String, password: String,
                        onCode: @escaping (String) -> Void,
                        completion: @escaping (String?, String?) -> Void) -> Bool {
-        guard let (bridge, selector, implementation) = method("signInWithAppleID:password:onCode:completion:") else { return false }
+        guard let found = method("signInWithAppleID:password:onCode:completion:") else { return false }
+        let (bridge, selector, implementation) = found
         typealias Function = @convention(c) (AnyClass, Selector, NSString, NSString,
                                              @convention(block) (NSString) -> Void,
                                              @convention(block) (NSString?, NSString?) -> Void) -> Void
@@ -399,33 +401,36 @@ enum AnderAccountAPI {
             DispatchQueue.main.async { onCode(prompt as String) }
         }
         let doneBlock: @convention(block) (NSString?, NSString?) -> Void = { error, account in
-            DispatchQueue.main.async { completion(error as String?, account as String?) }
+            DispatchQueue.main.async { completion(error.map { $0 as String }, account.map { $0 as String }) }
         }
         unsafeBitCast(implementation, to: Function.self)(bridge, selector, appleID as NSString, password as NSString, codeBlock, doneBlock)
         return true
     }
 
     static func submitCode(_ code: String) {
-        guard let (bridge, selector, implementation) = method("submitCode:") else { return }
+        guard let found = method("submitCode:") else { return }
+        let (bridge, selector, implementation) = found
         typealias Function = @convention(c) (AnyClass, Selector, NSString) -> Void
         unsafeBitCast(implementation, to: Function.self)(bridge, selector, code as NSString)
     }
 
     static func status(completion: @escaping (String?, String?) -> Void) {
-        guard let (bridge, selector, implementation) = method("statusWithCompletion:") else {
+        guard let found = method("statusWithCompletion:") else {
             completion(nil, nil)
             return
         }
+        let (bridge, selector, implementation) = found
         typealias Function = @convention(c) (AnyClass, Selector, @convention(block) (NSString?, NSString?) -> Void) -> Void
         let block: @convention(block) (NSString?, NSString?) -> Void = { appleID, team in
-            DispatchQueue.main.async { completion(appleID as String?, team as String?) }
+            DispatchQueue.main.async { completion(appleID.map { $0 as String }, team.map { $0 as String }) }
         }
         unsafeBitCast(implementation, to: Function.self)(bridge, selector, block)
     }
 
     @discardableResult
     static func refresh(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) -> Bool {
-        guard let (bridge, selector, implementation) = method("refreshWithProgress:completion:") else { return false }
+        guard let found = method("refreshWithProgress:completion:") else { return false }
+        let (bridge, selector, implementation) = found
         typealias Function = @convention(c) (AnyClass, Selector,
                                              @convention(block) (Double) -> Void,
                                              @convention(block) (NSString?) -> Void) -> Void
@@ -433,7 +438,7 @@ enum AnderAccountAPI {
             DispatchQueue.main.async { progress(value) }
         }
         let doneBlock: @convention(block) (NSString?) -> Void = { error in
-            DispatchQueue.main.async { completion(error as String?) }
+            DispatchQueue.main.async { completion(error.map { $0 as String }) }
         }
         unsafeBitCast(implementation, to: Function.self)(bridge, selector, progressBlock, doneBlock)
         return true
