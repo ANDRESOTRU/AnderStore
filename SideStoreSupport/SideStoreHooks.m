@@ -99,7 +99,8 @@ NSURL* SideStoreSource_hook_altStoreSourceURL(id self, SEL cmd) {
     static NSURL* sourceURL = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        sourceURL = [NSURL URLWithString:@"https://github.com/LiveContainer/LiveContainer/releases/download/1.0/apps_ss_lc.json"];
+        // AnderStore: updates of AnderStore itself come only from the AnderStore store
+        sourceURL = [NSURL URLWithString:@"https://store.andresot.uk/source.json"];
     });
     return sourceURL;
 }

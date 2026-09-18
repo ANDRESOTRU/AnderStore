@@ -109,4 +109,21 @@ static Class<AnderCoreBridgeProtocol> AnderCoreBridge(void) {
     }];
 }
 
+- (void)updateSelf {
+    if(!handler) {
+        return;
+    }
+    Class<AnderCoreBridgeProtocol> bridge = AnderCoreBridge();
+    NSObject<RefreshServer>* server = handler.server;
+    if(!bridge) {
+        [server selfUpdateFinished:@"AnderStore Core is unavailable"];
+        return;
+    }
+    [bridge updateSelfWithProgress:^(double value) {
+        [server updateProgress:value];
+    } completion:^(NSString *error) {
+        [server selfUpdateFinished:error];
+    }];
+}
+
 @end

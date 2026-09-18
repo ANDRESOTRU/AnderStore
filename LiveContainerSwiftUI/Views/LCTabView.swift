@@ -21,6 +21,7 @@ struct LCTabView: View {
     @Environment(\.scenePhase) var scenePhase
     @StateObject var downloadHelper = DownloadHelper()
     @AppStorage("anderWelcomeShown") private var welcomeShown = false
+    @AppStorage("anderLatestVersion") private var anderLatestVersion = ""
 
     let pub = NotificationCenter.default.publisher(for: UIScene.didDisconnectNotification)
     
@@ -43,6 +44,7 @@ struct LCTabView: View {
                     .tabItem {
                         Label("lc.tabView.account".loc, systemImage: "person.crop.circle.fill")
                     }
+                    .badge(!anderLatestVersion.isEmpty && AnderUpdateChecker.isNewer(anderLatestVersion, than: AnderUpdateChecker.currentVersion) ? 1 : 0)
                     .tag(LCTabIdentifier.account)
             }
             LCSettingsView()
@@ -55,7 +57,10 @@ struct LCTabView: View {
         .fullScreenCover(isPresented: Binding(get: { !welcomeShown }, set: { if !$0 { welcomeShown = true } })) {
             AnderWelcomeView { welcomeShown = true }
         }
-        .onAppear { AnderTheme.applyAppearance() }
+        .onAppear {
+            AnderTheme.applyAppearance()
+            AnderUpdateChecker.checkIfNeeded()
+        }
         .downloadAlert(helper: downloadHelper)
         .environmentObject(downloadHelper)
         .alert("lc.common.error".loc, isPresented: $errorShow){
@@ -328,6 +333,72 @@ enum AnderTheme {
     }
 }
 
+// MARK: - AnderStore self-update check (reads store.andresot.uk, no Core needed)
+enum AnderUpdateChecker {
+    static let sourceURL = URL(string: "https://store.andresot.uk/source.json")!
+    static let bundleIdentifier = "com.kdt.livecontainer"
+
+    static var currentVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+    }
+
+    /// true when version a is newer than version b (compares numbers: 1.0.12 > 1.0.9).
+    static func isNewer(_ a: String, than b: String) -> Bool {
+        let left = a.split(separator: ".").map { Int($0) ?? 0 }
+        let right = b.split(separator: ".").map { Int($0) ?? 0 }
+        for index in 0..<max(left.count, right.count) {
+            let l = index < left.count ? left[index] : 0
+            let r = index < right.count ? right[index] : 0
+            if l != r { return l > r }
+        }
+        return false
+    }
+
+    /// Fetches the newest AnderStore version from the store. Calls back on the main thread.
+    static func fetchLatest(completion: @escaping (_ version: String?, _ notes: String?) -> Void) {
+        var request = URLRequest(url: sourceURL)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 15
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            var version: String?
+            var notes: String?
+            if let data,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let apps = json["apps"] as? [[String: Any]],
+               let app = apps.first(where: { ($0["bundleIdentifier"] as? String) == bundleIdentifier }) {
+                if let versions = app["versions"] as? [[String: Any]], let latest = versions.first {
+                    version = latest["version"] as? String
+                    notes = latest["localizedDescription"] as? String
+                } else {
+                    version = app["version"] as? String
+                }
+            }
+            DispatchQueue.main.async { completion(version, notes) }
+        }.resume()
+    }
+
+    /// Checks at most every 6 hours; stores the result and notifies once per new version.
+    static func checkIfNeeded(force: Bool = false) {
+        let defaults = UserDefaults.standard
+        let last = defaults.double(forKey: "anderLastUpdateCheck")
+        guard force || Date().timeIntervalSince1970 - last > 6 * 3600 else { return }
+        defaults.set(Date().timeIntervalSince1970, forKey: "anderLastUpdateCheck")
+        fetchLatest { version, notes in
+            guard let version else { return }
+            defaults.set(version, forKey: "anderLatestVersion")
+            defaults.set(notes ?? "", forKey: "anderLatestNotes")
+            guard isNewer(version, than: currentVersion),
+                  defaults.string(forKey: "anderNotifiedVersion") != version else { return }
+            defaults.set(version, forKey: "anderNotifiedVersion")
+            let content = UNMutableNotificationContent()
+            content.title = "lc.update.notificationTitle".loc
+            content.body = String(format: "lc.update.notificationBody".loc, version)
+            content.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "anderstore.update.\(version)", content: content, trigger: nil))
+        }
+    }
+}
+
 // MARK: - AnderStore account tab (signature status, setup checklist, opens the built-in AnderStore Core)
 enum AnderSignature {
     /// Expiration date of this app's own provisioning profile — when it passes, AnderStore stops launching.
@@ -428,6 +499,23 @@ enum AnderAccountAPI {
     }
 
     @discardableResult
+    static func updateSelf(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) -> Bool {
+        guard let found = method("updateSelfWithProgress:completion:") else { return false }
+        let (bridge, selector, implementation) = found
+        typealias Function = @convention(c) (AnyClass, Selector,
+                                             @convention(block) (Double) -> Void,
+                                             @convention(block) (NSString?) -> Void) -> Void
+        let progressBlock: @convention(block) (Double) -> Void = { value in
+            DispatchQueue.main.async { progress(value) }
+        }
+        let doneBlock: @convention(block) (NSString?) -> Void = { error in
+            DispatchQueue.main.async { completion(error.map { $0 as String }) }
+        }
+        unsafeBitCast(implementation, to: Function.self)(bridge, selector, progressBlock, doneBlock)
+        return true
+    }
+
+    @discardableResult
     static func refresh(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) -> Bool {
         guard let found = method("refreshWithProgress:completion:") else { return false }
         let (bridge, selector, implementation) = found
@@ -490,7 +578,12 @@ struct AnderAccountView: View {
         case signingIn
         case needsCode(String)
         case refreshing(Double)
+        case updating(Double)
     }
+
+    @AppStorage("anderLatestVersion") private var latestVersion = ""
+    @AppStorage("anderLatestNotes") private var latestNotes = ""
+    private var updateAvailable: Bool { !latestVersion.isEmpty && AnderUpdateChecker.isNewer(latestVersion, than: AnderUpdateChecker.currentVersion) }
 
     @EnvironmentObject private var sharedModel: SharedModel
     @AppStorage("anderVPNInstalled") private var vpnInstalled = false
@@ -518,6 +611,9 @@ struct AnderAccountView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     header
+                    if updateAvailable || isUpdating {
+                        updateCard
+                    }
                     signatureCard
                     accountCard
                     if case .needsCode(let prompt) = phase {
@@ -557,20 +653,85 @@ struct AnderAccountView: View {
         }
     }
 
+    private var isUpdating: Bool {
+        if case .updating = phase { return true }
+        return false
+    }
+
+    private func updateSelf() {
+        guard coreAvailable else {
+            message = "lc.account.errorNoExtension".loc
+            return
+        }
+        message = nil
+        phase = .updating(0)
+        let started = AnderAccountAPI.updateSelf(progress: { value in
+            phase = .updating(value)
+        }, completion: { error in
+            phase = .idle
+            if let error {
+                message = AnderAccountAPI.friendly(error)
+            } else {
+                message = nil
+                latestNotes = ""
+            }
+        })
+        if !started {
+            phase = .idle
+            message = "lc.account.errorNoExtension".loc
+        }
+    }
+
+    private var updateCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.down.app.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(AnderTheme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("lc.update.title".loc).font(.footnote).foregroundStyle(.secondary)
+                    Text(String(format: "lc.update.available".loc, latestVersion))
+                        .font(.title3.weight(.semibold))
+                }
+                Spacer()
+            }
+            if !latestNotes.isEmpty {
+                Text(latestNotes).font(.footnote).foregroundStyle(.secondary).lineLimit(4)
+            }
+            Text(String(format: "lc.update.current".loc, AnderUpdateChecker.currentVersion))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if case .updating(let value) = phase {
+                ProgressView(value: value).tint(AnderTheme.accent)
+                Text("lc.update.inProgress".loc).font(.footnote).foregroundStyle(.secondary)
+            } else {
+                Button(action: updateSelf) {
+                    Label("lc.update.button".loc, systemImage: "arrow.down.circle.fill")
+                        .font(.body.weight(.medium))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(AnderTheme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
+                }
+                .disabled(busy || !signedIn)
+                if !signedIn {
+                    Text("lc.update.needSignIn".loc).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .anderCard()
+    }
+
     private func reload() {
+        AnderUpdateChecker.checkIfNeeded()
         certificateReady = LCSharedUtils.certificatePassword() != nil
         expiration = AnderSignature.expirationDate()
         coreAvailable = AnderAccountAPI.isAvailable
         if let expiration {
             AnderSignature.scheduleReminders(expiration: expiration)
         }
-        if coreAvailable && !busy {
-            AnderAccountAPI.status { appleID, _ in
-                if let appleID, !appleID.isEmpty {
-                    savedAppleID = appleID
-                }
-            }
-        }
+        // Core is started only by the Sign in / Refresh buttons, never on opening the tab
     }
 
     // MARK: Actions

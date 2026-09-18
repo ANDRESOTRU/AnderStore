@@ -19,6 +19,7 @@ jobs:
       scheme: ${{ steps.scheme.outputs.scheme }}
       archive_path: ${{ env.archive_path }}
       artifact: AnderStore.ipa
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -69,6 +70,16 @@ jobs:
           file_to_build=`ls -A | grep -i \\.xcworkspace\$ || ls -A | grep -i \\.xcodeproj\$`
           file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
           echo "file_to_build=$file_to_build" >> $GITHUB_OUTPUT
+      - name: Set AnderStore version
+        id: version
+        run: |
+          VERSION="1.0.${{ github.run_number }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" LiveContainer/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" LiveContainer/Info.plist
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "ANDERSTORE_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "AnderStore version $VERSION"
+
       - name: Archive
         env:
           scheme: ${{ steps.scheme.outputs.scheme }}
@@ -131,3 +142,7 @@ jobs:
 
           Установка: https://store.andresot.uk/download"
           gh release view nightly --json assets --jq ".assets[].name"
+          # Versioned release for self-update from inside AnderStore (store.andresot.uk picks it up)
+          VERSION="${{ needs.build.outputs.version }}"
+          gh release create "v$VERSION" AnderStore.ipa             --title "AnderStore $VERSION"             --target "${{ github.sha }}"             --latest             --notes "${{ env.COMMIT_MSG }}"
+          gh release view "v$VERSION" --json assets --jq ".assets[].name"

@@ -101,19 +101,26 @@ class RefreshHandler: NSObject, RefreshServer {
     func ensureCoreRunning() async throws {
         if listener == nil {
             guard let listener = startAnonymousListener(self) else {
-                return
+                throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core could not start (no XPC listener)"])
             }
             self.listener = listener
         }
         guard let listener = self.listener else {
-            return
+            throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core could not start (no XPC listener)"])
         }
 
         // launch SideStore if it's not running
         if (sideStorePid <= 0 || getpgid(sideStorePid) <= 0) && launchContinuation == nil {
-            let lcHome = String(cString:getenv("LC_HOME_PATH"))
+            guard let lcHomeC = getenv("LC_HOME_PATH") else {
+                throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore home folder is unknown"])
+            }
+            let lcHome = String(cString: lcHomeC)
             let sideStoreHomeURL = URL(fileURLWithPath: lcHome).appendingPathComponent("Documents/SideStore")
-            let bookmarkData = bookmarkForURL(sideStoreHomeURL)!
+            // AnderStore: the Core home folder does not exist until Core runs for the first time
+            try? FileManager.default.createDirectory(at: sideStoreHomeURL, withIntermediateDirectories: true)
+            guard let bookmarkData = bookmarkForURL(sideStoreHomeURL) else {
+                throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core data folder is not accessible"])
+            }
 
             // start LiveProcess
             let extensionItem = NSExtensionItem()
@@ -138,7 +145,7 @@ class RefreshHandler: NSObject, RefreshServer {
                 throw NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to start extension \(error). To use the Refresh All Apps shortcut, reinstall LiveContainer+SideStore with LiveProcess installed. If you use SideStore, choose \"Keep App Extensions (Use Main Profile)\". If you use Impactor, choose \"Only Register Main Bundle\". For other sideloaders, select keep all extensions, i.e. DO NOT Remove any extension."])
             }
             guard let ext else {
-                return
+                throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core could not start"])
             }
             self.ext = ext
             
@@ -146,6 +153,7 @@ class RefreshHandler: NSObject, RefreshServer {
                 self.c?.resume(throwing: NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Built-in SideStore quit unexpectedly"]))
                 self.c = nil
                 self.sideStorePid = 0
+                self.launchContinuation?.resume(throwing: NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core quit while starting"]))
                 self.launchContinuation = nil
                 self.signInFinished("AnderStore Core quit unexpectedly", account: nil)
             }
@@ -155,7 +163,7 @@ class RefreshHandler: NSObject, RefreshServer {
             
             try await withUnsafeThrowingContinuation { c in
                 self.launchContinuation = c
-                DispatchQueue.main.asyncAfter(deadline: .now() + 300) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
                     if let c = self.launchContinuation {
                         c.resume(throwing: NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Built-in SideStore failed to start in reasonable time"]))
                         self.launchContinuation = nil
@@ -171,6 +179,15 @@ class RefreshHandler: NSObject, RefreshServer {
     var codeHandler: ((String) -> Void)? = nil
     var signInCompletion: ((String?, String?) -> Void)? = nil
     var statusCompletion: ((String?, String?) -> Void)? = nil
+    var selfUpdateCompletion: ((String?) -> Void)? = nil
+
+    func selfUpdateFinished(_ error: String?) {
+        DispatchQueue.main.async {
+            let completion = self.selfUpdateCompletion
+            self.selfUpdateCompletion = nil
+            completion?(error)
+        }
+    }
 
     func needsVerificationCode(_ prompt: String) {
         DispatchQueue.main.async { self.codeHandler?(prompt) }
@@ -292,6 +309,36 @@ public final class AnderAccountBridge: NSObject {
             }
             handler.statusCompletion = completion
             client.requestAccountStatus()
+        }
+    }
+
+    /// Downloads and installs the newest AnderStore from store.andresot.uk (no computer needed).
+    @objc(updateSelfWithProgress:completion:)
+    public static func updateSelf(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) {
+        Task { @MainActor in
+            let handler = RefreshHandler.shared
+            do {
+                try await handler.ensureCoreRunning()
+            } catch {
+                completion(error.localizedDescription)
+                return
+            }
+            guard let client = handler.client else {
+                completion("AnderStore Core is not connected")
+                return
+            }
+            let tracker = Progress(totalUnitCount: 100)
+            let observation = tracker.observe(\Progress.fractionCompleted, options: [.new]) { _, change in
+                if let value = change.newValue {
+                    DispatchQueue.main.async { progress(value) }
+                }
+            }
+            handler.progress = tracker
+            handler.selfUpdateCompletion = { error in
+                observation.invalidate()
+                completion(error)
+            }
+            client.updateSelf()
         }
     }
 

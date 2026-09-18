@@ -20,6 +20,8 @@ __attribute__((swift_attr("@Sendable")))
 - (void)needsVerificationCode:(NSString*)prompt NS_SWIFT_NAME(needsVerificationCode(_:));
 - (void)signInFinished:(nullable NSString*)error account:(nullable NSString*)appleID NS_SWIFT_NAME(signInFinished(_:account:));
 - (void)accountStatusAppleID:(nullable NSString*)appleID team:(nullable NSString*)team NS_SWIFT_NAME(accountStatus(appleID:team:));
+// AnderStore: self-update
+- (void)selfUpdateFinished:(nullable NSString*)error NS_SWIFT_NAME(selfUpdateFinished(_:));
 @end
 
 @protocol RefreshClient
@@ -28,6 +30,8 @@ __attribute__((swift_attr("@Sendable")))
 - (void)signInWithAppleID:(NSString*)appleID password:(NSString*)password NS_SWIFT_NAME(signIn(appleID:password:));
 - (void)submitVerificationCode:(NSString*)code NS_SWIFT_NAME(submitVerificationCode(_:));
 - (void)requestAccountStatus NS_SWIFT_NAME(requestAccountStatus());
+// AnderStore: self-update
+- (void)updateSelf NS_SWIFT_NAME(updateSelf());
 @end
 
 // Implemented in Core (AnderCoreBridge.swift), looked up at runtime with NSClassFromString
@@ -38,6 +42,7 @@ __attribute__((swift_attr("@Sendable")))
                completion:(void (^)(NSString* _Nullable error, NSString* _Nullable appleID))completion;
 + (void)submitVerificationCode:(NSString*)code;
 + (void)accountStatusWithCompletion:(void (^)(NSString* _Nullable appleID, NSString* _Nullable team))completion;
++ (void)updateSelfWithProgress:(void (^)(double value))progress completion:(void (^)(NSString* _Nullable error))completion;
 @end
 
 @interface LiveProcessSideStoreHandler : NSObject

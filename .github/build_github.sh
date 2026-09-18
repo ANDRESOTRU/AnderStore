@@ -70,5 +70,13 @@ find payloadlc/Payload -type d -name "_CodeSignature" -exec rm -r {} +
 
 ldid -S.github/sidelc/LiveWidgetExtension_adhoc.xml ./Payload/LiveContainer.app/PlugIns/LiveWidgetExtension.appex/LiveWidgetExtension
 
+# AnderStore: every bundle inside the app gets the same version (needed for self-update)
+if [ -n "$ANDERSTORE_VERSION" ]; then
+  for plist in ./Payload/LiveContainer.app/Info.plist ./Payload/LiveContainer.app/PlugIns/*.appex/Info.plist; do
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $ANDERSTORE_VERSION" "$plist" || true
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${ANDERSTORE_VERSION##*.}" "$plist" || true
+  done
+fi
+
 # package
 zip -r "AnderStore.ipa" "Payload" -x "._*" -x ".DS_Store" -x "__MACOSX"
