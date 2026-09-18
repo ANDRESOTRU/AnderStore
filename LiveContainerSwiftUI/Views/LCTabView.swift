@@ -583,6 +583,7 @@ struct AnderAccountView: View {
 
     @AppStorage("anderLatestVersion") private var latestVersion = ""
     @AppStorage("anderLatestNotes") private var latestNotes = ""
+    @AppStorage("anderLastAutoRefresh") private var lastAutoRefresh = 0.0
     private var updateAvailable: Bool { !latestVersion.isEmpty && AnderUpdateChecker.isNewer(latestVersion, than: AnderUpdateChecker.currentVersion) }
 
     @EnvironmentObject private var sharedModel: SharedModel
@@ -639,11 +640,13 @@ struct AnderAccountView: View {
                         Label("lc.account.help".loc, systemImage: "questionmark.circle")
                             .foregroundColor(AnderTheme.accent)
                     }
-                    Button("lc.account.advanced".loc) {
-                        LCUtils.openSideStore()
+                    if sharedModel.developerMode {
+                        Button("lc.account.advanced".loc) {
+                            LCUtils.openSideStore()
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
                 }
                 .padding(16)
             }
@@ -723,6 +726,17 @@ struct AnderAccountView: View {
         .anderCard()
     }
 
+    /// Продлевает подпись сама, когда осталось мало дней (не чаще раза в 6 часов).
+    private func autoRefreshIfNeeded() {
+        guard coreAvailable, signedIn, !busy,
+              let expiration,
+              AnderSignature.daysLeft(until: expiration) <= 3,
+              Date().timeIntervalSince1970 - lastAutoRefresh > 6 * 3600
+        else { return }
+        lastAutoRefresh = Date().timeIntervalSince1970
+        refresh()
+    }
+
     private func reload() {
         AnderUpdateChecker.checkIfNeeded()
         certificateReady = LCSharedUtils.certificatePassword() != nil
@@ -731,6 +745,7 @@ struct AnderAccountView: View {
         if let expiration {
             AnderSignature.scheduleReminders(expiration: expiration)
         }
+        autoRefreshIfNeeded()
         // Core is started only by the Sign in / Refresh buttons, never on opening the tab
     }
 
