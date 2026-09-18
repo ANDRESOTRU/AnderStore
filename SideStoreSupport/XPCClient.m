@@ -67,4 +67,46 @@ void installSideStoreHooks(void);
     [self performRefreshForRealWithIdentifier:identifier mangledTypeName:mangledTypeName server:handler.server];
 }
 
+#pragma mark - AnderStore sign-in (runs inside the background Core process)
+
+static Class<AnderCoreBridgeProtocol> AnderCoreBridge(void) {
+    return (Class<AnderCoreBridgeProtocol>)NSClassFromString(@"AnderCoreBridge");
+}
+
+- (void)signInWithAppleID:(NSString*)appleID password:(NSString*)password {
+    if(!handler) {
+        return;
+    }
+    Class<AnderCoreBridgeProtocol> bridge = AnderCoreBridge();
+    if(!bridge) {
+        [handler.server signInFinished:@"AnderStore Core is unavailable" account:nil];
+        return;
+    }
+    NSObject<RefreshServer>* server = handler.server;
+    [bridge signInWithAppleID:appleID password:password codeRequester:^(NSString *prompt) {
+        [server needsVerificationCode:prompt];
+    } completion:^(NSString *error, NSString *signedInAppleID) {
+        [server signInFinished:error account:signedInAppleID];
+    }];
+}
+
+- (void)submitVerificationCode:(NSString*)code {
+    [AnderCoreBridge() submitVerificationCode:code];
+}
+
+- (void)requestAccountStatus {
+    if(!handler) {
+        return;
+    }
+    Class<AnderCoreBridgeProtocol> bridge = AnderCoreBridge();
+    NSObject<RefreshServer>* server = handler.server;
+    if(!bridge) {
+        [server accountStatusAppleID:nil team:nil];
+        return;
+    }
+    [bridge accountStatusWithCompletion:^(NSString *appleID, NSString *team) {
+        [server accountStatusAppleID:appleID team:team];
+    }];
+}
+
 @end

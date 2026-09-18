@@ -88,6 +88,17 @@ class RefreshHandler: NSObject, RefreshServer {
             throw NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Another refresh task is in progress."])
         }
         
+        try await ensureCoreRunning()
+        self.client?.refreshAllApps(withIdentifier: identifier, mangledTypeName: mangledName)
+        
+        try await withUnsafeThrowingContinuation { c in
+            self.c = c
+        }
+        
+    }
+    
+    /// Starts AnderStore Core in the background (LiveProcess) if it is not running yet.
+    func ensureCoreRunning() async throws {
         if listener == nil {
             guard let listener = startAnonymousListener(self) else {
                 return
@@ -136,6 +147,7 @@ class RefreshHandler: NSObject, RefreshServer {
                 self.c = nil
                 self.sideStorePid = 0
                 self.launchContinuation = nil
+                self.signInFinished("AnderStore Core quit unexpectedly", account: nil)
             }
             
             let uuid = await ext.beginRequest(withInputItems: [extensionItem])
@@ -152,14 +164,35 @@ class RefreshHandler: NSObject, RefreshServer {
                 }
             }
         }
-        self.client?.refreshAllApps(withIdentifier: identifier, mangledTypeName: mangledName)
-        
-        try await withUnsafeThrowingContinuation { c in
-            self.c = c
-        }
-        
     }
-    
+
+    // MARK: AnderStore sign-in callbacks (from the background Core)
+
+    var codeHandler: ((String) -> Void)? = nil
+    var signInCompletion: ((String?, String?) -> Void)? = nil
+    var statusCompletion: ((String?, String?) -> Void)? = nil
+
+    func needsVerificationCode(_ prompt: String) {
+        DispatchQueue.main.async { self.codeHandler?(prompt) }
+    }
+
+    func signInFinished(_ error: String?, account appleID: String?) {
+        DispatchQueue.main.async {
+            let completion = self.signInCompletion
+            self.signInCompletion = nil
+            self.codeHandler = nil
+            completion?(error, appleID)
+        }
+    }
+
+    func accountStatus(appleID: String?, team: String?) {
+        DispatchQueue.main.async {
+            let completion = self.statusCompletion
+            self.statusCompletion = nil
+            completion?(appleID, team)
+        }
+    }
+
     func updateProgress(_ value: Double) {
         progress?.completedUnitCount = Int64(value*100)
     }
@@ -196,4 +229,91 @@ class RefreshHandler: NSObject, RefreshServer {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
     }
     
+}
+
+
+// MARK: - AnderStore account API for the main screen
+// Called from LiveContainerSwiftUI through the Objective-C runtime (NSClassFromString("AnderAccountBridge")).
+
+@available(iOS 17.0, *)
+@objc(AnderAccountBridge)
+public final class AnderAccountBridge: NSObject {
+
+    /// true when the background Core (LiveProcess extension) is installed with the app.
+    @objc public static func isAvailable() -> Bool {
+        guard let url = UserDefaults.lcMainBundle().builtInPlugInsURL?.appendingPathComponent("LiveProcess.appex") else {
+            return false
+        }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    @objc(signInWithAppleID:password:onCode:completion:)
+    public static func signIn(appleID: String,
+                              password: String,
+                              onCode: @escaping (String) -> Void,
+                              completion: @escaping (String?, String?) -> Void) {
+        Task { @MainActor in
+            let handler = RefreshHandler.shared
+            do {
+                try await handler.ensureCoreRunning()
+            } catch {
+                completion(error.localizedDescription, nil)
+                return
+            }
+            guard let client = handler.client else {
+                completion("AnderStore Core is not connected", nil)
+                return
+            }
+            handler.codeHandler = onCode
+            handler.signInCompletion = completion
+            client.signIn(appleID: appleID, password: password)
+        }
+    }
+
+    /// Sends the 6-digit code typed by the user. An empty string cancels sign-in.
+    @objc(submitCode:)
+    public static func submitCode(_ code: String) {
+        RefreshHandler.shared.client?.submitVerificationCode(code)
+    }
+
+    @objc(statusWithCompletion:)
+    public static func status(completion: @escaping (String?, String?) -> Void) {
+        Task { @MainActor in
+            let handler = RefreshHandler.shared
+            do {
+                try await handler.ensureCoreRunning()
+            } catch {
+                completion(nil, nil)
+                return
+            }
+            guard let client = handler.client else {
+                completion(nil, nil)
+                return
+            }
+            handler.statusCompletion = completion
+            client.requestAccountStatus()
+        }
+    }
+
+    /// Refreshes the signature of AnderStore and every app (same as the "Refresh All Apps" shortcut).
+    @objc(refreshWithProgress:completion:)
+    public static func refresh(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) {
+        Task { @MainActor in
+            let tracker = Progress(totalUnitCount: 100)
+            let observation = tracker.observe(.fractionCompleted, options: [.new]) { _, change in
+                if let value = change.newValue {
+                    DispatchQueue.main.async { progress(value) }
+                }
+            }
+            RefreshHandler.shared.progress = tracker
+            do {
+                try await RefreshHandler.shared.startRefresh(identifier: "RefreshAllIntent", mangledName: "9SideStore20RefreshAllAppsIntentV")
+                observation.invalidate()
+                completion(nil)
+            } catch {
+                observation.invalidate()
+                completion(error.localizedDescription)
+            }
+        }
+    }
 }

@@ -32698,13 +32698,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apple ID, signing and app updates"
+            "value" : "Apple ID and signature — all in one place"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apple ID, подпись и обновление приложений"
+            "value" : "Apple ID и подпись — всё в одном месте"
           }
         }
       }
@@ -32902,13 +32902,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Open account settings and sign in with the same Apple ID you used on the computer."
+            "value" : "Sign in above — it’s needed to renew the signature."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Откройте настройки аккаунта и войдите тем же Apple ID, что и на компьютере."
+            "value" : "Войдите выше — это нужно, чтобы продлевать подпись."
           }
         }
       }
@@ -32953,13 +32953,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In Settings tap “Import Certificate from AnderStore”. Needed to install apps."
+            "value" : "Connected automatically after sign-in."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "В «Настройках» нажмите «Импортировать сертификат из AnderStore». Нужно для установки приложений."
+            "value" : "Подключается автоматически после входа."
           }
         }
       }
@@ -33300,6 +33300,295 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Другой магазин"
+          }
+        }
+      }
+    },
+    "lc.account.advanced" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Advanced account settings"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Расширенные настройки аккаунта"
+          }
+        }
+      }
+    },
+    "lc.account.refreshing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refreshing… Keep LocalDevVPN on and don’t close AnderStore."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновляем… Не выключайте LocalDevVPN и не закрывайте AnderStore."
+          }
+        }
+      }
+    },
+    "lc.account.signedInAs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple ID"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple ID"
+          }
+        }
+      }
+    },
+    "lc.account.change" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сменить"
+          }
+        }
+      }
+    },
+    "lc.account.signInTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in with Apple ID"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вход в Apple ID"
+          }
+        }
+      }
+    },
+    "lc.account.signInDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the same Apple ID as in the installer on your computer."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Используйте тот же Apple ID, что и в установщике на компьютере."
+          }
+        }
+      }
+    },
+    "lc.account.emailPlaceholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple ID email"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Почта Apple ID"
+          }
+        }
+      }
+    },
+    "lc.account.passwordPlaceholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пароль"
+          }
+        }
+      }
+    },
+    "lc.account.signingIn" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signing in…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Входим…"
+          }
+        }
+      }
+    },
+    "lc.account.signInButton" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Войти"
+          }
+        }
+      }
+    },
+    "lc.account.privacy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your email and password are sent only to Apple."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Почта и пароль отправляются только в Apple."
+          }
+        }
+      }
+    },
+    "lc.account.codeTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verification code"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Код подтверждения"
+          }
+        }
+      }
+    },
+    "lc.account.codeDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the 6-digit code that appeared on your iPhone, iPad or Mac."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Введите 6-значный код, который пришёл на ваш iPhone, iPad или Mac."
+          }
+        }
+      }
+    },
+    "lc.account.codeConfirm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подтвердить"
+          }
+        }
+      }
+    },
+    "lc.account.errorPassword" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wrong Apple ID or password. Check them and try again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Неверный Apple ID или пароль. Проверьте и попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "lc.account.errorVPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No connection to your iPhone. Open LocalDevVPN, tap Connect and try again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет связи с iPhone. Откройте LocalDevVPN, нажмите «Подключить» и попробуйте снова."
+          }
+        }
+      }
+    },
+    "lc.account.errorNoExtension" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore was installed without its background component. Reinstall it with the AnderStore Installer."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore установлен без фонового компонента. Переустановите его через AnderStore Installer."
           }
         }
       }

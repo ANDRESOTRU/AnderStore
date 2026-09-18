@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import UserNotifications
+import Security
 
 struct LCTabView: View {
     @State var errorShow = false
@@ -367,13 +368,145 @@ enum AnderSignature {
     }
 }
 
+// MARK: - AnderStore account API (Apple ID sign-in and signature refresh without leaving AnderStore)
+// Talks to SideStoreSupport's AnderAccountBridge through the Objective-C runtime:
+// SideStoreSupport is loaded with dlopen, so it is not linked to this module.
+enum AnderAccountAPI {
+    private static func method(_ name: String) -> (AnyClass, Selector, IMP)? {
+        guard let bridge = NSClassFromString("AnderAccountBridge"),
+              let metaclass = object_getClass(bridge) else { return nil }
+        let selector = NSSelectorFromString(name)
+        guard class_respondsToSelector(metaclass, selector),
+              let implementation = class_getMethodImplementation(metaclass, selector) else { return nil }
+        return (bridge, selector, implementation)
+    }
+
+    static var isAvailable: Bool {
+        guard let (bridge, selector, implementation) = method("isAvailable") else { return false }
+        typealias Function = @convention(c) (AnyClass, Selector) -> Bool
+        return unsafeBitCast(implementation, to: Function.self)(bridge, selector)
+    }
+
+    @discardableResult
+    static func signIn(appleID: String, password: String,
+                       onCode: @escaping (String) -> Void,
+                       completion: @escaping (String?, String?) -> Void) -> Bool {
+        guard let (bridge, selector, implementation) = method("signInWithAppleID:password:onCode:completion:") else { return false }
+        typealias Function = @convention(c) (AnyClass, Selector, NSString, NSString,
+                                             @convention(block) (NSString) -> Void,
+                                             @convention(block) (NSString?, NSString?) -> Void) -> Void
+        let codeBlock: @convention(block) (NSString) -> Void = { prompt in
+            DispatchQueue.main.async { onCode(prompt as String) }
+        }
+        let doneBlock: @convention(block) (NSString?, NSString?) -> Void = { error, account in
+            DispatchQueue.main.async { completion(error as String?, account as String?) }
+        }
+        unsafeBitCast(implementation, to: Function.self)(bridge, selector, appleID as NSString, password as NSString, codeBlock, doneBlock)
+        return true
+    }
+
+    static func submitCode(_ code: String) {
+        guard let (bridge, selector, implementation) = method("submitCode:") else { return }
+        typealias Function = @convention(c) (AnyClass, Selector, NSString) -> Void
+        unsafeBitCast(implementation, to: Function.self)(bridge, selector, code as NSString)
+    }
+
+    static func status(completion: @escaping (String?, String?) -> Void) {
+        guard let (bridge, selector, implementation) = method("statusWithCompletion:") else {
+            completion(nil, nil)
+            return
+        }
+        typealias Function = @convention(c) (AnyClass, Selector, @convention(block) (NSString?, NSString?) -> Void) -> Void
+        let block: @convention(block) (NSString?, NSString?) -> Void = { appleID, team in
+            DispatchQueue.main.async { completion(appleID as String?, team as String?) }
+        }
+        unsafeBitCast(implementation, to: Function.self)(bridge, selector, block)
+    }
+
+    @discardableResult
+    static func refresh(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) -> Bool {
+        guard let (bridge, selector, implementation) = method("refreshWithProgress:completion:") else { return false }
+        typealias Function = @convention(c) (AnyClass, Selector,
+                                             @convention(block) (Double) -> Void,
+                                             @convention(block) (NSString?) -> Void) -> Void
+        let progressBlock: @convention(block) (Double) -> Void = { value in
+            DispatchQueue.main.async { progress(value) }
+        }
+        let doneBlock: @convention(block) (NSString?) -> Void = { error in
+            DispatchQueue.main.async { completion(error as String?) }
+        }
+        unsafeBitCast(implementation, to: Function.self)(bridge, selector, progressBlock, doneBlock)
+        return true
+    }
+
+    /// Copies the signing certificate created by Core into AnderStore (same as "Import Certificate from AnderStore").
+    @discardableResult
+    static func importCertificateFromCore() -> Bool {
+        func keychainData(_ account: String) -> Data? {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: account,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne,
+                kSecAttrService as String: "com.kdt.livecontainer",
+                kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
+            ]
+            var item: CFTypeRef?
+            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else { return nil }
+            return item as? Data
+        }
+        guard let certificate = keychainData("signingCertificate") else { return false }
+        let password = keychainData("signingCertificatePassword").flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        LCUtils.appGroupUserDefault.set(certificate, forKey: "LCCertificateData")
+        LCUtils.appGroupUserDefault.set(password, forKey: "LCCertificatePassword")
+        LCUtils.appGroupUserDefault.set(NSDate.now, forKey: "LCCertificateUpdateDate")
+        return true
+    }
+
+    /// Turns technical errors from Core into short Russian/English hints.
+    static func friendly(_ error: String) -> String {
+        let lower = error.lowercased()
+        if lower.contains("password") || lower.contains("incorrect") || lower.contains("-22406") {
+            return "lc.account.errorPassword".loc
+        }
+        if lower.contains("vpn") || lower.contains("connect") || lower.contains("timed out") || lower.contains("minimuxer") || lower.contains("heartbeat") {
+            return "lc.account.errorVPN".loc
+        }
+        if lower.contains("liveprocess") || lower.contains("extension") {
+            return "lc.account.errorNoExtension".loc
+        }
+        return error
+    }
+}
+
 struct AnderAccountView: View {
+    private enum Phase: Equatable {
+        case idle
+        case signingIn
+        case needsCode(String)
+        case refreshing(Double)
+    }
+
     @EnvironmentObject private var sharedModel: SharedModel
     @AppStorage("anderVPNInstalled") private var vpnInstalled = false
+    @AppStorage("anderAppleID") private var savedAppleID = ""
+
     @State private var expiration: Date? = nil
     @State private var certificateReady = false
+    @State private var coreAvailable = true
+    @State private var phase: Phase = .idle
+    @State private var email = ""
+    @State private var password = ""
+    @State private var code = ""
+    @State private var message: String? = nil
+    @State private var showSignInForm = false
 
-    private var allDone: Bool { certificateReady && vpnInstalled }
+    private var signedIn: Bool { !savedAppleID.isEmpty }
+    private var allDone: Bool { signedIn && certificateReady && vpnInstalled }
+    private var busy: Bool {
+        if case .idle = phase { return false }
+        return true
+    }
 
     var body: some View {
         NavigationView {
@@ -381,21 +514,21 @@ struct AnderAccountView: View {
                 VStack(spacing: 16) {
                     header
                     signatureCard
+                    accountCard
+                    if case .needsCode(let prompt) = phase {
+                        codeCard(prompt: prompt)
+                    }
+                    if let message {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .anderCard()
+                    }
                     if allDone {
                         doneCard
                     } else {
                         checklist
-                    }
-                    Button {
-                        LCUtils.openSideStore()
-                    } label: {
-                        Label("lc.account.open".loc, systemImage: "person.crop.circle")
-                            .font(.body.weight(.medium))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(AnderTheme.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
                     }
                     Button {
                         if let url = URL(string: "https://store.andresot.uk/help") {
@@ -405,7 +538,11 @@ struct AnderAccountView: View {
                         Label("lc.account.help".loc, systemImage: "questionmark.circle")
                             .foregroundColor(AnderTheme.accent)
                     }
-                    .padding(.top, 4)
+                    Button("lc.account.advanced".loc) {
+                        LCUtils.openSideStore()
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
                 .padding(16)
             }
@@ -418,10 +555,81 @@ struct AnderAccountView: View {
     private func reload() {
         certificateReady = LCSharedUtils.certificatePassword() != nil
         expiration = AnderSignature.expirationDate()
+        coreAvailable = AnderAccountAPI.isAvailable
         if let expiration {
             AnderSignature.scheduleReminders(expiration: expiration)
         }
+        if coreAvailable && !busy {
+            AnderAccountAPI.status { appleID, _ in
+                if let appleID, !appleID.isEmpty {
+                    savedAppleID = appleID
+                }
+            }
+        }
     }
+
+    // MARK: Actions
+
+    private func signIn() {
+        let appleID = email.trimmingCharacters(in: .whitespaces)
+        guard !appleID.isEmpty, !password.isEmpty else { return }
+        guard coreAvailable else {
+            message = "lc.account.errorNoExtension".loc
+            return
+        }
+        message = nil
+        phase = .signingIn
+        let started = AnderAccountAPI.signIn(appleID: appleID, password: password, onCode: { prompt in
+            code = ""
+            phase = .needsCode(prompt)
+        }, completion: { error, account in
+            phase = .idle
+            password = ""
+            if let error {
+                message = AnderAccountAPI.friendly(error)
+                return
+            }
+            savedAppleID = account ?? appleID
+            showSignInForm = false
+            certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
+        })
+        if !started {
+            phase = .idle
+            message = "lc.account.errorNoExtension".loc
+        }
+    }
+
+    private func submitCode(cancel: Bool = false) {
+        let value = cancel ? "" : code.trimmingCharacters(in: .whitespaces)
+        phase = .signingIn
+        AnderAccountAPI.submitCode(value)
+    }
+
+    private func refresh() {
+        guard coreAvailable else {
+            LCUtils.openSideStore()
+            return
+        }
+        message = nil
+        phase = .refreshing(0)
+        let started = AnderAccountAPI.refresh(progress: { value in
+            phase = .refreshing(value)
+        }, completion: { error in
+            phase = .idle
+            if let error {
+                message = AnderAccountAPI.friendly(error)
+            } else {
+                certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
+                expiration = AnderSignature.expirationDate()
+            }
+        })
+        if !started {
+            phase = .idle
+            message = "lc.account.errorNoExtension".loc
+        }
+    }
+
+    // MARK: Views
 
     private var header: some View {
         VStack(spacing: 8) {
@@ -467,16 +675,116 @@ struct AnderAccountView: View {
             Text("lc.account.refreshHint".loc)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Button {
-                LCUtils.openSideStore()
-            } label: {
-                Label("lc.account.refreshNow".loc, systemImage: "arrow.clockwise")
-                    .font(.body.weight(.medium))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(AnderTheme.accent.opacity(0.16))
+            if case .refreshing(let value) = phase {
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: value)
+                        .tint(AnderTheme.accent)
+                    Text("lc.account.refreshing".loc)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Button(action: refresh) {
+                    Label("lc.account.refreshNow".loc, systemImage: "arrow.clockwise")
+                        .font(.body.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(AnderTheme.accent.opacity(0.16))
+                        .foregroundColor(AnderTheme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusButton))
+                }
+                .disabled(busy || !signedIn)
+            }
+        }
+        .anderCard()
+    }
+
+    @ViewBuilder
+    private var accountCard: some View {
+        if signedIn && !showSignInForm {
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.system(size: 28))
                     .foregroundColor(AnderTheme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("lc.account.signedInAs".loc).font(.footnote).foregroundStyle(.secondary)
+                    Text(savedAppleID).font(.body.weight(.medium))
+                }
+                Spacer()
+                Button("lc.account.change".loc) {
+                    email = savedAppleID
+                    showSignInForm = true
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundColor(AnderTheme.accent)
+                .disabled(busy)
+            }
+            .anderCard()
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("lc.account.signInTitle".loc).font(.headline)
+                Text("lc.account.signInDesc".loc).font(.footnote).foregroundStyle(.secondary)
+                TextField("lc.account.emailPlaceholder".loc, text: $email)
+                    .textContentType(.username)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(12)
+                    .background(AnderTheme.surface)
                     .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusButton))
+                SecureField("lc.account.passwordPlaceholder".loc, text: $password)
+                    .textContentType(.password)
+                    .padding(12)
+                    .background(AnderTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusButton))
+                Button(action: signIn) {
+                    HStack {
+                        if case .signingIn = phase {
+                            ProgressView().tint(.white)
+                        }
+                        Text(phase == .signingIn ? "lc.account.signingIn".loc : "lc.account.signInButton".loc)
+                            .font(.body.weight(.medium))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(AnderTheme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
+                }
+                .disabled(busy || email.isEmpty || password.isEmpty)
+                Text("lc.account.privacy".loc).font(.caption).foregroundStyle(.secondary)
+            }
+            .anderCard()
+        }
+    }
+
+    private func codeCard(prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("lc.account.codeTitle".loc).font(.headline)
+            Text(prompt == "trustedDevice" || prompt == "sms" ? "lc.account.codeDesc".loc : prompt)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            TextField("000000", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .padding(12)
+                .background(AnderTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusButton))
+            HStack(spacing: 12) {
+                Button("lc.common.cancel".loc) { submitCode(cancel: true) }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(AnderTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusButton))
+                Button("lc.account.codeConfirm".loc) { submitCode() }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(AnderTheme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusButton))
+                    .disabled(code.count < 6)
             }
         }
         .anderCard()
@@ -485,20 +793,18 @@ struct AnderAccountView: View {
     private var checklist: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("lc.account.setupTitle".loc).font(.headline)
-            checklistRow(done: certificateReady, number: 1, title: "lc.account.stepLogin".loc, detail: "lc.account.stepLoginDesc".loc, action: "lc.account.stepLoginAction".loc) {
-                LCUtils.openSideStore()
-            }
-            checklistRow(done: certificateReady, number: 2, title: "lc.account.stepCert".loc, detail: "lc.account.stepCertDesc".loc, action: "lc.account.stepCertAction".loc) {
-                sharedModel.selectedTab = .settings
-            }
-            checklistRow(done: vpnInstalled, number: 3, title: "lc.account.stepVPN".loc, detail: "lc.account.stepVPNDesc".loc, action: "lc.account.stepVPNAction".loc) {
+            checklistRow(done: signedIn, number: 1, title: "lc.account.stepLogin".loc, detail: "lc.account.stepLoginDesc".loc)
+            checklistRow(done: certificateReady, number: 2, title: "lc.account.stepCert".loc, detail: "lc.account.stepCertDesc".loc)
+            checklistRow(done: vpnInstalled, number: 3, title: "lc.account.stepVPN".loc, detail: "lc.account.stepVPNDesc".loc,
+                         action: "lc.account.stepVPNAction".loc) {
                 vpnInstalled = true
             }
         }
         .anderCard()
     }
 
-    private func checklistRow(done: Bool, number: Int, title: String, detail: String, action: String, perform: @escaping () -> Void) -> some View {
+    private func checklistRow(done: Bool, number: Int, title: String, detail: String,
+                              action: String? = nil, perform: (() -> Void)? = nil) -> some View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle().fill(done ? Color.green : AnderTheme.accent)
@@ -512,7 +818,7 @@ struct AnderAccountView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.body.weight(.medium)).strikethrough(done)
                 Text(detail).font(.footnote).foregroundStyle(.secondary)
-                if !done {
+                if !done, let action, let perform {
                     Button(action, action: perform)
                         .font(.footnote.weight(.semibold))
                         .foregroundColor(AnderTheme.accent)

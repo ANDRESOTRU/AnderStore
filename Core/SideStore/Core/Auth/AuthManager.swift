@@ -161,6 +161,28 @@ public final class AuthManager: @unchecked Sendable {
     }
     
     
+    /// AnderStore: sign in with a custom handler (no Core interface — questions are answered by AnderStore over XPC).
+    @discardableResult
+    func signIn(
+        signInHandler: SignInHandler,
+        anisetteServerHandler: AnisetteServerHandler
+    ) async throws -> SignInResult {
+        let dbBackgroundContext = DatabaseManager.shared.persistentContainer.newBackgroundContext()
+        let context = StandaloneOperationContext(
+            steps: .signIn,
+            dbBackgroundContext: dbBackgroundContext
+        )
+
+        let signInOperation = try SignInOperation(
+            context: context,
+            signInHandler: signInHandler,
+            anisetteServerHandler: anisetteServerHandler,
+            skipDeviceRegistration: false,
+            skipCertificateProvisioning: false
+        )
+        return try await signInOperation.execute()
+    }
+
     // Developer Portal Operations
     public func signIn(appleID: String, 
                        password: String, 
