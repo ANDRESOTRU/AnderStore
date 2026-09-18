@@ -300,7 +300,7 @@ public final class AnderAccountBridge: NSObject {
     public static func refresh(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) {
         Task { @MainActor in
             let tracker = Progress(totalUnitCount: 100)
-            let observation = tracker.observe(.fractionCompleted, options: [.new]) { _, change in
+            let observation = tracker.observe(\Progress.fractionCompleted, options: [.new]) { _, change in
                 if let value = change.newValue {
                     DispatchQueue.main.async { progress(value) }
                 }
