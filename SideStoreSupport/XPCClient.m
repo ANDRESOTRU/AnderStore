@@ -34,14 +34,16 @@ void installSideStoreHooks(void);
 
 + (void)load {
     if(!NSUserDefaults.isSideStore) return;
-    
+
     installSideStoreHooks();
-    
+
     if(!NSUserDefaults.isLiveProcess) return;
-    
+
     handler = [PrivClass(LiveProcessSideStoreHandler) shared];
     installSideStoreNotificationHooks();
-    handler.connection.exportedInterface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshClient)];
+    NSXPCInterface* clientInterface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshClient)];
+    anderConfigureClientInterface(clientInterface);
+    handler.connection.exportedInterface = clientInterface;
     handler.connection.exportedObject = SideStoreClient.shared;
 
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -67,62 +69,63 @@ void installSideStoreHooks(void);
     [self performRefreshForRealWithIdentifier:identifier mangledTypeName:mangledTypeName server:handler.server];
 }
 
-#pragma mark - AnderStore sign-in (runs inside the background Core process)
+#pragma mark - AnderStore command envelope (runs inside the background Core process)
 
 static Class<AnderCoreBridgeProtocol> AnderCoreBridge(void) {
     return (Class<AnderCoreBridgeProtocol>)NSClassFromString(@"AnderCoreBridge");
 }
 
-- (void)signInWithAppleID:(NSString*)appleID password:(NSString*)password {
+static NSDictionary* AnderError(NSString* kind, NSString* message) {
+    return @{@"kind": kind, @"message": message};
+}
+
+/// Ends the LiveProcess request and exits. Mirrors the termination path in LCBootstrap.m.
+static void AnderTerminateCore(void) {
+    NSExtensionContext *context = [NSClassFromString(@"LiveProcessHandler") extensionContext];
+    [context completeRequestReturningItems:@[] completionHandler:nil];
+    exit(0);
+}
+
+- (void)performRequest:(NSDictionary*)request requestID:(NSString*)requestID {
     if(!handler) {
         return;
     }
+    NSObject<RefreshServer>* server = handler.server;
     Class<AnderCoreBridgeProtocol> bridge = AnderCoreBridge();
     if(!bridge) {
-        [handler.server signInFinished:@"AnderStore Core is unavailable" account:nil];
+        [server request:requestID
+  didFinishWithResponse:nil
+                  error:AnderError(@"coreUnavailable", @"AnderStore Core is unavailable")];
         return;
     }
-    NSObject<RefreshServer>* server = handler.server;
-    [bridge signInWithAppleID:appleID password:password codeRequester:^(NSString *prompt) {
-        [server needsVerificationCode:prompt];
-    } completion:^(NSString *error, NSString *signedInAppleID) {
-        [server signInFinished:error account:signedInAppleID];
+    [bridge performRequest:request requestID:requestID onEvent:^(NSDictionary *event) {
+        [server request:requestID didEmitEvent:event];
+    } completion:^(NSDictionary *response, NSDictionary *error) {
+        [server request:requestID didFinishWithResponse:response error:error];
     }];
 }
 
-- (void)submitVerificationCode:(NSString*)code {
-    [AnderCoreBridge() submitVerificationCode:code];
+- (void)cancelRequestWithID:(NSString*)requestID {
+    [AnderCoreBridge() cancelRequestWithID:requestID];
 }
 
-- (void)requestAccountStatus {
-    if(!handler) {
-        return;
-    }
-    Class<AnderCoreBridgeProtocol> bridge = AnderCoreBridge();
+- (void)shutdownWithReason:(NSString*)reason {
     NSObject<RefreshServer>* server = handler.server;
-    if(!bridge) {
-        [server accountStatusAppleID:nil team:nil];
-        return;
-    }
-    [bridge accountStatusWithCompletion:^(NSString *appleID, NSString *team) {
-        [server accountStatusAppleID:appleID team:team];
-    }];
-}
-
-- (void)updateSelf {
-    if(!handler) {
-        return;
-    }
     Class<AnderCoreBridgeProtocol> bridge = AnderCoreBridge();
-    NSObject<RefreshServer>* server = handler.server;
     if(!bridge) {
-        [server selfUpdateFinished:@"AnderStore Core is unavailable"];
+        [server willShutdownWithReason:reason];
+        AnderTerminateCore();
         return;
     }
-    [bridge updateSelfWithProgress:^(double value) {
-        [server updateProgress:value];
-    } completion:^(NSString *error) {
-        [server selfUpdateFinished:error];
+    [bridge prepareForShutdownWithReason:reason completion:^(BOOL accepted) {
+        if(!accepted) {
+            // Core is in the middle of an operation; the host keeps it running.
+            return;
+        }
+        [server willShutdownWithReason:reason];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(250 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            AnderTerminateCore();
+        });
     }];
 }
 

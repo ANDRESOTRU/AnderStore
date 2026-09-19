@@ -15,7 +15,9 @@
 @implementation ServerDelegate
 
 - (BOOL)listener:(NSXPCListener *)listener shouldAcceptNewConnection:(NSXPCConnection *)newConnection {
-    newConnection.exportedInterface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshServer)];
+    NSXPCInterface* iface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshServer)];
+    anderConfigureServerInterface(iface);
+    newConnection.exportedInterface = iface;
     newConnection.exportedObject = self.reporter;
     [self.reporter onConnection:newConnection];
     [newConnection resume];

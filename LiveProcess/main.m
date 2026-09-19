@@ -83,7 +83,9 @@ int LiveProcessMain(int argc, char *argv[]) {
         NSXPCListenerEndpoint* endpoint = appInfo[@"endpoint"];
 
         NSXPCConnection* connection = [[NSXPCConnection alloc] initWithListenerEndpoint:endpoint];
-        connection.remoteObjectInterface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshServer)];
+        NSXPCInterface* serverInterface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshServer)];
+        anderConfigureServerInterface(serverInterface);
+        connection.remoteObjectInterface = serverInterface;
         connection.interruptionHandler = ^{
             NSLog(@"interrupted!!!");
         };

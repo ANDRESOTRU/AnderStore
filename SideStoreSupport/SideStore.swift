@@ -15,8 +15,8 @@ func performIntentRefresh(identifier: String, mangledTypeName: String, intentPro
     if UserDefaults.isSideStore() {
         try await SideStoreIntentCaller.shared.callRefreshIntent(mangledTypeName: mangledTypeName)
     } else {
-        RefreshHandler.shared.progress = intentProgress
-        try await RefreshHandler.shared.startRefresh(identifier: identifier, mangledName: mangledTypeName)
+        await MainActor.run { AnderCoreService.shared.progress = intentProgress }
+        try await AnderCoreService.shared.performLegacyRefresh(identifier: identifier, mangledName: mangledTypeName)
     }
 }
 
@@ -25,9 +25,9 @@ public struct RefreshAllAppsWidgetIntent: AppIntent, ProgressReportingIntent
 {
     public static var title: LocalizedStringResource { "Refresh Apps via Widget" }
     public static var isDiscoverable: Bool { false } // Don't show in Shortcuts or Spotlight.
-    
+
     public init() {}
-    
+
     public func perform() async throws -> some IntentResult
     {
         try await performIntentRefresh(identifier: "RefreshAllAppsWidgetIntent", mangledTypeName: "9SideStore26RefreshAllAppsWidgetIntentV", intentProgress: progress)
@@ -39,16 +39,16 @@ public struct RefreshAllAppsWidgetIntent: AppIntent, ProgressReportingIntent
 public struct RefreshAllAppsIntent: AppIntent, CustomIntentMigratedAppIntent, PredictableIntent, ProgressReportingIntent, ForegroundContinuableIntent
 {
     public static let intentClassName = "RefreshAllIntent"
-    
+
     public static var title: LocalizedStringResource = "Refresh All Apps"
     public static var description = IntentDescription("Refreshes your sideloaded apps to prevent them from expiring.")
-    
+
     public init() {}
-    
+
     public static var parameterSummary: some ParameterSummary {
         Summary("Refresh All Apps")
     }
-    
+
     public static var predictionConfiguration: some IntentPredictionConfiguration {
         IntentPrediction {
             DisplayRepresentation(
@@ -57,187 +57,76 @@ public struct RefreshAllAppsIntent: AppIntent, CustomIntentMigratedAppIntent, Pr
             )
         }
     }
-    
+
     public func perform() async throws -> some IntentResult & ProvidesDialog
     {
         try await performIntentRefresh(identifier: "RefreshAllIntent", mangledTypeName: "9SideStore20RefreshAllAppsIntentV", intentProgress: progress)
         return .result(dialog: "All apps have been refreshed.")
     }
-    
+
 }
 
 
+/// The Core process reports everything through this object. It keeps no state of its own:
+/// AnderCoreService owns the connection, the lifetime and the requests in flight.
 class RefreshHandler: NSObject, RefreshServer {
-    var c: UnsafeContinuation<(), any Error>? = nil
-    var launchContinuation: UnsafeContinuation<(), any Error>? = nil
-    var progress: Progress? = nil
-    var listener: NSXPCListener? = nil
-    var sideStorePid: Int32 = 0
-    var client: RefreshClient? = nil
-    var ext: NSExtension? = nil
-    
+
     static var shared = RefreshHandler()
-    
-    func startRefresh(identifier: String, mangledName: String) async throws {
-        if sideStorePid <= 0 || getpgid(sideStorePid) <= 0, let c {
-            c.resume(throwing: NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Built-in SideStore quit unexpectedly"]))
-            self.c = nil
-        }
-        
-        if c != nil {
-            throw NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Another refresh task is in progress."])
-        }
-        
-        try await ensureCoreRunning()
-        self.client?.refreshAllApps(withIdentifier: identifier, mangledTypeName: mangledName)
-        
-        try await withUnsafeThrowingContinuation { c in
-            self.c = c
-        }
-        
-    }
-    
-    /// Starts AnderStore Core in the background (LiveProcess) if it is not running yet.
-    func ensureCoreRunning() async throws {
-        if listener == nil {
-            guard let listener = startAnonymousListener(self) else {
-                throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core could not start (no XPC listener)"])
-            }
-            self.listener = listener
-        }
-        guard let listener = self.listener else {
-            throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core could not start (no XPC listener)"])
-        }
 
-        // launch SideStore if it's not running
-        if (sideStorePid <= 0 || getpgid(sideStorePid) <= 0) && launchContinuation == nil {
-            guard let lcHomeC = getenv("LC_HOME_PATH") else {
-                throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore home folder is unknown"])
-            }
-            let lcHome = String(cString: lcHomeC)
-            let sideStoreHomeURL = URL(fileURLWithPath: lcHome).appendingPathComponent("Documents/SideStore")
-            // AnderStore: the Core home folder does not exist until Core runs for the first time
-            try? FileManager.default.createDirectory(at: sideStoreHomeURL, withIntermediateDirectories: true)
-            guard let bookmarkData = bookmarkForURL(sideStoreHomeURL) else {
-                throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core data folder is not accessible"])
-            }
+    /// Assigned on the XPC queue the moment Core connects, so a request can go out immediately.
+    var client: RefreshClient? = nil
 
-            // start LiveProcess
-            let extensionItem = NSExtensionItem()
-            extensionItem.userInfo = [
-                "selected": "builtinSideStore",
-                "bookmarks": [bookmarkData],
-                "endpoint": listener.endpoint
-            ]
-
-            guard let liveProcessURL = UserDefaults.lcMainBundle().builtInPlugInsURL?.appendingPathComponent("LiveProcess.appex"),
-                  let liveProcessBundle = Bundle(url: liveProcessURL)
-            else {
-                NSLog("Unable to locate LiveProcess bundle")
-                throw NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to locate LiveProcess bundle. To use the Refresh All Apps shortcut, reinstall LiveContainer+SideStore with LiveProcess installed. If you use SideStore, choose \"Keep App Extensions (Use Main Profile)\". If you use PlumeImpactor, choose \"Only Register Main Bundle\". For other sideloaders, select keep all extensions, i.e. DO NOT Remove any extension."])
-            }
-            
-            var ext : NSExtension?
-            do {
-                ext = try NSExtension(identifier: liveProcessBundle.bundleIdentifier)
-            } catch {
-                NSLog("Failed to start extension \(error)")
-                throw NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to start extension \(error). To use the Refresh All Apps shortcut, reinstall LiveContainer+SideStore with LiveProcess installed. If you use SideStore, choose \"Keep App Extensions (Use Main Profile)\". If you use Impactor, choose \"Only Register Main Bundle\". For other sideloaders, select keep all extensions, i.e. DO NOT Remove any extension."])
-            }
-            guard let ext else {
-                throw NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core could not start"])
-            }
-            self.ext = ext
-            
-            ext.setRequestInterruptionBlock { uuid in
-                self.c?.resume(throwing: NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Built-in SideStore quit unexpectedly"]))
-                self.c = nil
-                self.sideStorePid = 0
-                self.launchContinuation?.resume(throwing: NSError(domain: "AnderStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "AnderStore Core quit while starting"]))
-                self.launchContinuation = nil
-                self.signInFinished("AnderStore Core quit unexpectedly", account: nil)
-            }
-            
-            let uuid = await ext.beginRequest(withInputItems: [extensionItem])
-            sideStorePid = ext.pid(forRequestIdentifier: uuid)
-            
-            try await withUnsafeThrowingContinuation { c in
-                self.launchContinuation = c
-                DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
-                    if let c = self.launchContinuation {
-                        c.resume(throwing: NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Built-in SideStore failed to start in reasonable time"]))
-                        self.launchContinuation = nil
-                        ext._kill(9)
-                    }
-                }
-            }
+    func onConnection(_ connection: NSXPCConnection!) {
+        let interface = NSXPCInterface(with: RefreshClient.self)
+        anderConfigureClientInterface(interface)
+        connection.remoteObjectInterface = interface
+        client = connection.remoteObjectProxy as? RefreshClient
+        connection.interruptionHandler = {
+            Task { @MainActor in AnderCoreService.shared.handleConnectionLost() }
+        }
+        connection.invalidationHandler = {
+            Task { @MainActor in AnderCoreService.shared.handleConnectionLost() }
         }
     }
 
-    // MARK: AnderStore sign-in callbacks (from the background Core)
+    func finishedLaunching() {
+        Task { @MainActor in AnderCoreService.shared.handleFinishedLaunching() }
+    }
 
-    var codeHandler: ((String) -> Void)? = nil
-    var signInCompletion: ((String?, String?) -> Void)? = nil
-    var statusCompletion: ((String?, String?) -> Void)? = nil
-    var selfUpdateCompletion: ((String?) -> Void)? = nil
+    // MARK: Command envelope
 
-    func selfUpdateFinished(_ error: String?) {
-        DispatchQueue.main.async {
-            let completion = self.selfUpdateCompletion
-            self.selfUpdateCompletion = nil
-            completion?(error)
+    func request(_ requestID: String, didEmitEvent event: [String: Any]) {
+        Task { @MainActor in
+            AnderCoreService.shared.handleEvent(requestID: requestID, event: event)
         }
     }
 
-    func needsVerificationCode(_ prompt: String) {
-        DispatchQueue.main.async { self.codeHandler?(prompt) }
-    }
-
-    func signInFinished(_ error: String?, account appleID: String?) {
-        DispatchQueue.main.async {
-            let completion = self.signInCompletion
-            self.signInCompletion = nil
-            self.codeHandler = nil
-            completion?(error, appleID)
+    func request(_ requestID: String, didFinishWithResponse response: [String: Any]?, error: [String: Any]?) {
+        Task { @MainActor in
+            AnderCoreService.shared.handleFinish(requestID: requestID, response: response, error: error)
         }
     }
 
-    func accountStatus(appleID: String?, team: String?) {
-        DispatchQueue.main.async {
-            let completion = self.statusCompletion
-            self.statusCompletion = nil
-            completion?(appleID, team)
-        }
+    func willShutdown(reason: String) {
+        Task { @MainActor in AnderCoreService.shared.handleWillShutdown(reason: reason) }
     }
+
+    // MARK: Legacy "Refresh All Apps" intent path
 
     func updateProgress(_ value: Double) {
-        progress?.completedUnitCount = Int64(value*100)
+        Task { @MainActor in AnderCoreService.shared.handleLegacyProgress(value) }
     }
-    
+
     func finish(_ error: String?) {
-        if let error {
-            c?.resume(throwing: NSError(domain: "SideStore", code: 1, userInfo: [NSLocalizedDescriptionKey: error]))
-            c = nil
-        } else {
-            c?.resume()
-            c = nil
-        }
+        Task { @MainActor in AnderCoreService.shared.handleLegacyFinish(error) }
     }
-    
-    func onConnection(_ connection: NSXPCConnection!) {
-        connection.remoteObjectInterface = NSXPCInterface(with: RefreshClient.self)
-        client = connection.remoteObjectProxy as? RefreshClient
-    }
-    
-    func finishedLaunching() {
-        launchContinuation?.resume()
-        launchContinuation = nil
-    }
+
+    // MARK: Notifications raised by Core
 
     func add(_ request: UNNotificationRequest) {
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
-                NSLog("Failed to add SideStore notification: \(error)")
+                NSLog("Failed to add AnderStore Core notification: \(error)")
             }
         }
     }
@@ -245,122 +134,72 @@ class RefreshHandler: NSObject, RefreshServer {
     func removePendingNotificationRequests(withIdentifiers identifiers: [String]) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
     }
-    
+
 }
 
 
-// MARK: - AnderStore account API for the main screen
-// Called from LiveContainerSwiftUI through the Objective-C runtime (NSClassFromString("AnderAccountBridge")).
+// MARK: - The one entry point the AnderStore interface calls
+// Reached from LiveContainerSwiftUI through the Objective-C runtime
+// (NSClassFromString("AnderCoreBridgeHost")), because this framework is loaded at runtime.
 
 @available(iOS 17.0, *)
-@objc(AnderAccountBridge)
-public final class AnderAccountBridge: NSObject {
+@objc(AnderCoreBridgeHost)
+public final class AnderCoreBridgeHost: NSObject {
 
-    /// true when the background Core (LiveProcess extension) is installed with the app.
+    /// true when the background Core (LiveProcess extension) shipped with the app.
     @objc public static func isAvailable() -> Bool {
-        guard let url = UserDefaults.lcMainBundle().builtInPlugInsURL?.appendingPathComponent("LiveProcess.appex") else {
-            return false
-        }
-        return FileManager.default.fileExists(atPath: url.path)
+        AnderCoreService.isInstalled
     }
 
-    @objc(signInWithAppleID:password:onCode:completion:)
-    public static func signIn(appleID: String,
-                              password: String,
-                              onCode: @escaping (String) -> Void,
-                              completion: @escaping (String?, String?) -> Void) {
+    /// Runs one command. `request` carries "cmd" plus that command's parameters; `onEvent`
+    /// receives progress and questions while it runs; `completion` gets either a response
+    /// dictionary or a structured error.
+    @objc(performRequest:onEvent:completion:)
+    public static func perform(_ request: [String: Any],
+                               onEvent: @escaping ([String: Any]) -> Void,
+                               completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        let command = request["cmd"] as? String ?? ""
+        var params = request
+        params.removeValue(forKey: "cmd")
+
         Task { @MainActor in
-            let handler = RefreshHandler.shared
             do {
-                try await handler.ensureCoreRunning()
-            } catch {
-                completion(error.localizedDescription, nil)
-                return
-            }
-            guard let client = handler.client else {
-                completion("AnderStore Core is not connected", nil)
-                return
-            }
-            handler.codeHandler = onCode
-            handler.signInCompletion = completion
-            client.signIn(appleID: appleID, password: password)
-        }
-    }
-
-    /// Sends the 6-digit code typed by the user. An empty string cancels sign-in.
-    @objc(submitCode:)
-    public static func submitCode(_ code: String) {
-        RefreshHandler.shared.client?.submitVerificationCode(code)
-    }
-
-    @objc(statusWithCompletion:)
-    public static func status(completion: @escaping (String?, String?) -> Void) {
-        Task { @MainActor in
-            let handler = RefreshHandler.shared
-            do {
-                try await handler.ensureCoreRunning()
-            } catch {
-                completion(nil, nil)
-                return
-            }
-            guard let client = handler.client else {
-                completion(nil, nil)
-                return
-            }
-            handler.statusCompletion = completion
-            client.requestAccountStatus()
-        }
-    }
-
-    /// Downloads and installs the newest AnderStore from store.andresot.uk (no computer needed).
-    @objc(updateSelfWithProgress:completion:)
-    public static func updateSelf(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) {
-        Task { @MainActor in
-            let handler = RefreshHandler.shared
-            do {
-                try await handler.ensureCoreRunning()
-            } catch {
-                completion(error.localizedDescription)
-                return
-            }
-            guard let client = handler.client else {
-                completion("AnderStore Core is not connected")
-                return
-            }
-            let tracker = Progress(totalUnitCount: 100)
-            let observation = tracker.observe(\Progress.fractionCompleted, options: [.new]) { _, change in
-                if let value = change.newValue {
-                    DispatchQueue.main.async { progress(value) }
+                let response: [String: Any]
+                if command == "apps.refresh" {
+                    response = try await runLegacyRefresh(onEvent: onEvent)
+                } else {
+                    response = try await AnderCoreService.shared.perform(command, params: params) { event in
+                        onEvent(event)
+                    }
                 }
+                completion(response, nil)
+            } catch let error as AnderCoreError {
+                completion(nil, error.payload)
+            } catch {
+                completion(nil, AnderCoreError(kind: "unknown", message: error.localizedDescription).payload)
             }
-            handler.progress = tracker
-            handler.selfUpdateCompletion = { error in
-                observation.invalidate()
-                completion(error)
-            }
-            client.updateSelf()
         }
     }
 
-    /// Refreshes the signature of AnderStore and every app (same as the "Refresh All Apps" shortcut).
-    @objc(refreshWithProgress:completion:)
-    public static func refresh(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) {
-        Task { @MainActor in
-            let tracker = Progress(totalUnitCount: 100)
-            let observation = tracker.observe(\Progress.fractionCompleted, options: [.new]) { _, change in
-                if let value = change.newValue {
-                    DispatchQueue.main.async { progress(value) }
-                }
-            }
-            RefreshHandler.shared.progress = tracker
-            do {
-                try await RefreshHandler.shared.startRefresh(identifier: "RefreshAllIntent", mangledName: "9SideStore20RefreshAllAppsIntentV")
-                observation.invalidate()
-                completion(nil)
-            } catch {
-                observation.invalidate()
-                completion(error.localizedDescription)
+    /// Lets Core save and quit, for example when the interface is done with it.
+    @objc(shutdown)
+    public static func shutdown() {
+        Task { @MainActor in AnderCoreService.shared.shutdown(reason: "requested") }
+    }
+
+    /// Refreshing every app still goes through the Refresh All Apps intent inside Core.
+    @MainActor
+    private static func runLegacyRefresh(onEvent: @escaping ([String: Any]) -> Void) async throws -> [String: Any] {
+        let tracker = Progress(totalUnitCount: 100)
+        let observation = tracker.observe(\Progress.fractionCompleted, options: [.new]) { _, change in
+            if let value = change.newValue {
+                DispatchQueue.main.async { onEvent(["kind": "progress", "value": value]) }
             }
         }
+        defer { observation.invalidate() }
+        AnderCoreService.shared.progress = tracker
+        try await AnderCoreService.shared.performLegacyRefresh(identifier: "RefreshAllIntent",
+                                                               mangledName: "9SideStore20RefreshAllAppsIntentV")
+        return [:]
     }
 }

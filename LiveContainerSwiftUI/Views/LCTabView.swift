@@ -439,12 +439,32 @@ enum AnderSignature {
     }
 }
 
-// MARK: - AnderStore account API (Apple ID sign-in and signature refresh without leaving AnderStore)
-// Talks to SideStoreSupport's AnderAccountBridge through the Objective-C runtime:
-// SideStoreSupport is loaded with dlopen, so it is not linked to this module.
+// MARK: - AnderStore Core (Apple ID, signature, self-update — all without leaving AnderStore)
+// Core is a background process with no interface of its own. Every capability travels through
+// one command envelope, so this file needs exactly three runtime lookups no matter how many
+// commands exist: SideStoreSupport is loaded with dlopen and is not linked to this module.
+
+/// A failure reported by Core. `kind` is stable; the message is only for the log.
+struct AnderCoreFailure {
+    let kind: String
+    let message: String
+
+    init(kind: String, message: String) {
+        self.kind = kind
+        self.message = message
+    }
+
+    init(payload: [String: Any]) {
+        self.kind = payload["kind"] as? String ?? "unknown"
+        self.message = payload["message"] as? String ?? ""
+    }
+
+    static let unavailable = AnderCoreFailure(kind: "coreUnavailable", message: "")
+}
+
 enum AnderAccountAPI {
     private static func method(_ name: String) -> (AnyClass, Selector, IMP)? {
-        guard let bridge = NSClassFromString("AnderAccountBridge"),
+        guard let bridge = NSClassFromString("AnderCoreBridgeHost"),
               let metaclass = object_getClass(bridge) else { return nil }
         let selector = NSSelectorFromString(name)
         guard class_respondsToSelector(metaclass, selector),
@@ -452,84 +472,99 @@ enum AnderAccountAPI {
         return (bridge, selector, implementation)
     }
 
+    private static let availabilityMethod = method("isAvailable")
+    private static let performMethod = method("performRequest:onEvent:completion:")
+    private static let shutdownMethod = method("shutdown")
+
     static var isAvailable: Bool {
-        guard let found = method("isAvailable") else { return false }
-        let (bridge, selector, implementation) = found
+        guard let (bridge, selector, implementation) = availabilityMethod else { return false }
         typealias Function = @convention(c) (AnyClass, Selector) -> Bool
         return unsafeBitCast(implementation, to: Function.self)(bridge, selector)
+    }
+
+    /// Runs one Core command. Returns false when Core is not part of this build.
+    @discardableResult
+    static func perform(_ command: String,
+                        params: [String: Any] = [:],
+                        onEvent: @escaping ([String: Any]) -> Void = { _ in },
+                        completion: @escaping ([String: Any]?, AnderCoreFailure?) -> Void) -> Bool {
+        guard let (bridge, selector, implementation) = performMethod else { return false }
+        typealias Function = @convention(c) (AnyClass, Selector, NSDictionary,
+                                             @convention(block) (NSDictionary) -> Void,
+                                             @convention(block) (NSDictionary?, NSDictionary?) -> Void) -> Void
+        var request = params
+        request["cmd"] = command
+        let eventBlock: @convention(block) (NSDictionary) -> Void = { event in
+            let payload = event as? [String: Any] ?? [:]
+            DispatchQueue.main.async { onEvent(payload) }
+        }
+        let doneBlock: @convention(block) (NSDictionary?, NSDictionary?) -> Void = { response, error in
+            let responsePayload = response as? [String: Any]
+            let failure = (error as? [String: Any]).map(AnderCoreFailure.init(payload:))
+            DispatchQueue.main.async { completion(responsePayload, failure) }
+        }
+        unsafeBitCast(implementation, to: Function.self)(bridge, selector, request as NSDictionary, eventBlock, doneBlock)
+        return true
+    }
+
+    /// Lets Core save and quit. It refuses while an operation is running.
+    static func shutdown() {
+        guard let (bridge, selector, implementation) = shutdownMethod else { return }
+        typealias Function = @convention(c) (AnyClass, Selector) -> Void
+        unsafeBitCast(implementation, to: Function.self)(bridge, selector)
     }
 
     @discardableResult
     static func signIn(appleID: String, password: String,
                        onCode: @escaping (String) -> Void,
-                       completion: @escaping (String?, String?) -> Void) -> Bool {
-        guard let found = method("signInWithAppleID:password:onCode:completion:") else { return false }
-        let (bridge, selector, implementation) = found
-        typealias Function = @convention(c) (AnyClass, Selector, NSString, NSString,
-                                             @convention(block) (NSString) -> Void,
-                                             @convention(block) (NSString?, NSString?) -> Void) -> Void
-        let codeBlock: @convention(block) (NSString) -> Void = { prompt in
-            DispatchQueue.main.async { onCode(prompt as String) }
-        }
-        let doneBlock: @convention(block) (NSString?, NSString?) -> Void = { error, account in
-            DispatchQueue.main.async { completion(error.map { $0 as String }, account.map { $0 as String }) }
-        }
-        unsafeBitCast(implementation, to: Function.self)(bridge, selector, appleID as NSString, password as NSString, codeBlock, doneBlock)
-        return true
+                       completion: @escaping (AnderCoreFailure?, String?) -> Void) -> Bool {
+        perform("account.signIn",
+                params: ["appleID": appleID, "password": password],
+                onEvent: { event in
+                    if event["kind"] as? String == "needsCode" {
+                        onCode(event["prompt"] as? String ?? "")
+                    }
+                },
+                completion: { response, failure in
+                    completion(failure, response?["appleID"] as? String)
+                })
     }
 
     static func submitCode(_ code: String) {
-        guard let found = method("submitCode:") else { return }
-        let (bridge, selector, implementation) = found
-        typealias Function = @convention(c) (AnyClass, Selector, NSString) -> Void
-        unsafeBitCast(implementation, to: Function.self)(bridge, selector, code as NSString)
+        perform("account.submitCode", params: ["code": code]) { _, _ in }
     }
 
     static func status(completion: @escaping (String?, String?) -> Void) {
-        guard let found = method("statusWithCompletion:") else {
+        let started = perform("account.status") { response, _ in
+            completion(response?["appleID"] as? String, response?["team"] as? String)
+        }
+        if !started {
             completion(nil, nil)
-            return
         }
-        let (bridge, selector, implementation) = found
-        typealias Function = @convention(c) (AnyClass, Selector, @convention(block) (NSString?, NSString?) -> Void) -> Void
-        let block: @convention(block) (NSString?, NSString?) -> Void = { appleID, team in
-            DispatchQueue.main.async { completion(appleID.map { $0 as String }, team.map { $0 as String }) }
-        }
-        unsafeBitCast(implementation, to: Function.self)(bridge, selector, block)
     }
 
     @discardableResult
-    static func updateSelf(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) -> Bool {
-        guard let found = method("updateSelfWithProgress:completion:") else { return false }
-        let (bridge, selector, implementation) = found
-        typealias Function = @convention(c) (AnyClass, Selector,
-                                             @convention(block) (Double) -> Void,
-                                             @convention(block) (NSString?) -> Void) -> Void
-        let progressBlock: @convention(block) (Double) -> Void = { value in
-            DispatchQueue.main.async { progress(value) }
-        }
-        let doneBlock: @convention(block) (NSString?) -> Void = { error in
-            DispatchQueue.main.async { completion(error.map { $0 as String }) }
-        }
-        unsafeBitCast(implementation, to: Function.self)(bridge, selector, progressBlock, doneBlock)
-        return true
+    static func updateSelf(progress: @escaping (Double) -> Void,
+                           completion: @escaping (AnderCoreFailure?) -> Void) -> Bool {
+        perform("self.update",
+                onEvent: { event in
+                    if event["kind"] as? String == "progress", let value = event["value"] as? Double {
+                        progress(value)
+                    }
+                },
+                completion: { _, failure in completion(failure) })
     }
 
     @discardableResult
-    static func refresh(progress: @escaping (Double) -> Void, completion: @escaping (String?) -> Void) -> Bool {
-        guard let found = method("refreshWithProgress:completion:") else { return false }
-        let (bridge, selector, implementation) = found
-        typealias Function = @convention(c) (AnyClass, Selector,
-                                             @convention(block) (Double) -> Void,
-                                             @convention(block) (NSString?) -> Void) -> Void
-        let progressBlock: @convention(block) (Double) -> Void = { value in
-            DispatchQueue.main.async { progress(value) }
-        }
-        let doneBlock: @convention(block) (NSString?) -> Void = { error in
-            DispatchQueue.main.async { completion(error.map { $0 as String }) }
-        }
-        unsafeBitCast(implementation, to: Function.self)(bridge, selector, progressBlock, doneBlock)
-        return true
+    static func refresh(progress: @escaping (Double) -> Void,
+                        completion: @escaping (AnderCoreFailure?) -> Void) -> Bool {
+        perform("apps.refresh",
+                onEvent: { event in
+                    if event["kind"] as? String == "progress", let value = event["value"] as? Double {
+                        progress(value)
+                    }
+                },
+                completion: { _, failure in completion(failure) })
     }
 
     /// Copies the signing certificate created by Core into AnderStore (same as "Import Certificate from AnderStore").
@@ -556,7 +591,30 @@ enum AnderAccountAPI {
         return true
     }
 
-    /// Turns technical errors from Core into short Russian/English hints.
+    /// Turns a failure from Core into a short hint. The `kind` decides — the wording of the
+    /// technical message never does.
+    static func friendly(_ failure: AnderCoreFailure) -> String {
+        switch failure.kind {
+        case "rateLimited":
+            return "lc.account.errorTooMany".loc
+        case "cancelled":
+            return "lc.account.errorCancelled".loc
+        case "certificateRevoked":
+            return "lc.account.errorRevoked".loc
+        case "certificateLimit", "appIDLimit", "certificateExpired":
+            return "lc.account.errorCertLimit".loc
+        case "needsAuth":
+            return "lc.account.errorPassword".loc
+        case "noVPN", "needsMinimuxer", "noConnection", "needsPairing", "noDevice", "timedOut":
+            return "lc.account.errorVPN".loc
+        case "coreUnavailable", "noBundle", "notConnected", "terminated", "startTimeout", "unsupportedCommand":
+            return "lc.account.errorNoExtension".loc
+        default:
+            return friendly(failure.message)
+        }
+    }
+
+    /// Fallback for messages Core could not classify.
     static func friendly(_ error: String) -> String {
         let lower = error.lowercased()
         if lower.contains("429") || lower.contains("too many requests") {
@@ -685,10 +743,10 @@ struct AnderAccountView: View {
         phase = .updating(0)
         let started = AnderAccountAPI.updateSelf(progress: { value in
             phase = .updating(value)
-        }, completion: { error in
+        }, completion: { failure in
             phase = .idle
-            if let error {
-                message = AnderAccountAPI.friendly(error)
+            if let failure {
+                message = AnderAccountAPI.friendly(failure)
             } else {
                 message = nil
                 latestNotes = ""
@@ -822,14 +880,13 @@ struct AnderAccountView: View {
         let started = AnderAccountAPI.signIn(appleID: appleID, password: password, onCode: { prompt in
             code = ""
             phase = .needsCode(prompt)
-        }, completion: { error, account in
+        }, completion: { failure, account in
             phase = .idle
             password = ""
-            if let error {
-                message = AnderAccountAPI.friendly(error)
+            if let failure {
+                message = AnderAccountAPI.friendly(failure)
                 // Apple ограничивает вход при частых попытках — сами держим паузу
-                let lower = error.lowercased()
-                let pause: TimeInterval = (lower.contains("429") || lower.contains("too many requests")) ? 30 * 60 : 60
+                let pause: TimeInterval = failure.kind == "rateLimited" ? 30 * 60 : 60
                 signInBlockedUntil = Date().timeIntervalSince1970 + pause
                 return
             }
@@ -852,17 +909,17 @@ struct AnderAccountView: View {
 
     private func refresh() {
         guard coreAvailable else {
-            LCUtils.openSideStore()
+            message = "lc.account.errorNoExtension".loc
             return
         }
         message = nil
         phase = .refreshing(0)
         let started = AnderAccountAPI.refresh(progress: { value in
             phase = .refreshing(value)
-        }, completion: { error in
+        }, completion: { failure in
             phase = .idle
-            if let error {
-                message = AnderAccountAPI.friendly(error)
+            if let failure {
+                message = AnderAccountAPI.friendly(failure)
             } else {
                 certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
                 expiration = AnderSignature.expirationDate()
