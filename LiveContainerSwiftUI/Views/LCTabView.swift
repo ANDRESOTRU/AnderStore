@@ -472,9 +472,11 @@ enum AnderAccountAPI {
         return (bridge, selector, implementation)
     }
 
-    private static let availabilityMethod = method("isAvailable")
-    private static let performMethod = method("performRequest:onEvent:completion:")
-    private static let shutdownMethod = method("shutdown")
+    // Looked up on every call, not cached: the framework may not be loaded yet the first
+    // time a screen asks, and a cached miss would never recover.
+    private static var availabilityMethod: (AnyClass, Selector, IMP)? { method("isAvailable") }
+    private static var performMethod: (AnyClass, Selector, IMP)? { method("performRequest:onEvent:completion:") }
+    private static var shutdownMethod: (AnyClass, Selector, IMP)? { method("shutdown") }
 
     static var isAvailable: Bool {
         guard let (bridge, selector, implementation) = availabilityMethod else { return false }
