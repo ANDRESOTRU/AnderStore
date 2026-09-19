@@ -32760,6 +32760,91 @@
         }
       }
     },
+    "lc.sources.update" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновить"
+          }
+        }
+      }
+    },
+    "lc.sources.installed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installed"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Установлено"
+          }
+        }
+      }
+    },
+    "lc.appList.installBusy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another app is being installed. Wait for it to finish."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сейчас устанавливается другое приложение. Дождитесь окончания."
+          }
+        }
+      }
+    },
+    "lc.appList.encryptedIpa" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file is an App Store copy protected by Apple and cannot be run. You need an unencrypted .ipa."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это копия из App Store с защитой Apple — запустить её нельзя. Нужен .ipa без шифрования."
+          }
+        }
+      }
+    },
+    "lc.appList.needsNewerIOS" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This app needs iOS %@ or newer."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приложению нужна iOS %@ или новее."
+          }
+        }
+      }
+    },
     "lc.jitlessDiag.appEntitlements" : {
       "extractionState" : "manual",
       "localizations" : {

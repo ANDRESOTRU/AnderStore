@@ -797,4 +797,45 @@
     [self save];
 }
 
+#pragma mark - Where this app came from
+// Written when the app is installed from the store, so AnderStore can tell later whether a
+// newer version exists. It lives next to the app, in LCAppInfo.plist, and therefore survives
+// an update and travels with the app between private and shared storage.
+
+- (NSString*)anderSourceURL {
+    return _info[@"anderSourceURL"];
+}
+
+- (void)setAnderSourceURL:(NSString *)value {
+    _info[@"anderSourceURL"] = value;
+    [self save];
+}
+
+- (NSString*)anderStoreBundleId {
+    return _info[@"anderStoreBundleId"];
+}
+
+- (void)setAnderStoreBundleId:(NSString *)value {
+    _info[@"anderStoreBundleId"] = value;
+    [self save];
+}
+
+- (NSString*)anderStoreVersion {
+    return _info[@"anderStoreVersion"];
+}
+
+- (void)setAnderStoreVersion:(NSString *)value {
+    _info[@"anderStoreVersion"] = value;
+    [self save];
+}
+
+- (NSString*)anderStoreBuildVersion {
+    return _info[@"anderStoreBuildVersion"];
+}
+
+- (void)setAnderStoreBuildVersion:(NSString *)value {
+    _info[@"anderStoreBuildVersion"] = value;
+    [self save];
+}
+
 @end

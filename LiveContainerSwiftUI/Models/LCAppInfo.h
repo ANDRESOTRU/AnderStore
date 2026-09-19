@@ -48,6 +48,11 @@ typedef NS_ENUM(NSInteger, MultitaskSpecified){
 @property NSDate* lastLaunched;
 @property NSDate* installationDate;
 @property NSString* remark;
+// Where this app came from, so updates can be offered later
+@property NSString* anderSourceURL;
+@property NSString* anderStoreBundleId;
+@property NSString* anderStoreVersion;
+@property NSString* anderStoreBuildVersion;
 @property bool is32bit;
 @property(readonly) bool is32bitEmulator;
 @property UIColor* cachedColor;

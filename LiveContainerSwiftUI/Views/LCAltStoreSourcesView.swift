@@ -535,7 +535,7 @@ struct LCSourcesView: View {
                                     isFiltering: isFiltering,
                                     isExpanded: expandedSources.contains(item.id),
                                     onRefresh: { Task { await viewModel.refreshSource(item) } },
-                                    onInstall: install(app:),
+                                    onInstall: { app in install(app: app, sourceURL: item.url) },
                                     onRemove: { sourcePendingRemoval = item },
                                     toggleExpanded: { toggleExpansion(for: item.id) }
                                 )
@@ -694,19 +694,23 @@ struct LCSourcesView: View {
     }
     
     @MainActor
-    private func install(app: AltStoreSourceApp) {
-        guard let downloadURL = app.latestVersion?.downloadURL else {
+    private func install(app: AltStoreSourceApp, sourceURL: URL) {
+        guard let version = app.latestVersion, let downloadURL = version.downloadURL else {
             errorMessage = "lc.sources.error.missingDownload".loc
             return
         }
-        withAnimation {
-            DataManager.shared.model.selectedTab = .apps
+        if AnderCatalog.installedApp(for: app.bundleIdentifier) != nil, !AnderCatalog.hasUpdate(for: app) {
+            // Already installed and up to date: show it where it lives.
+            withAnimation { DataManager.shared.model.selectedTab = .apps }
+            return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            NotificationCenter.default.post(name: NSNotification.InstallAppNotification, object: ["url": downloadURL])
+        let provenance = AnderProvenance(sourceURL: sourceURL.absoluteString,
+                                         storeBundleId: app.bundleIdentifier,
+                                         version: version.version,
+                                         buildVersion: version.buildVersion)
+        Task {
+            await AnderInstaller.shared.install(urlString: downloadURL.absoluteString, provenance: provenance)
         }
-
-
     }
     
     private func toggleExpansion(for id: URL) {
@@ -968,9 +972,31 @@ private struct LCSourceAppBanner: View {
     let app: AltStoreSourceApp
     let source: AltStoreSource
     let installAction: (AltStoreSourceApp) -> Void
-    
+
     @AppStorage("dynamicColors") private var dynamicColors = true
     @Environment(\.colorScheme) var colorScheme
+    @EnvironmentObject private var sharedModel: SharedModel
+    @ObservedObject private var installer = AnderInstaller.shared
+
+    private var installedApps: [LCAppModel] { sharedModel.apps + sharedModel.hiddenApps }
+
+    private var isInstalling: Bool {
+        installer.activeStoreBundleId == app.bundleIdentifier
+    }
+
+    private var isInstalled: Bool {
+        AnderCatalog.installedApp(for: app.bundleIdentifier, in: installedApps) != nil
+    }
+
+    private var hasUpdate: Bool {
+        AnderCatalog.hasUpdate(for: app, in: installedApps)
+    }
+
+    private var actionTitle: String {
+        if hasUpdate { return "lc.sources.update".loc }
+        if isInstalled { return "lc.sources.installed".loc }
+        return "lc.common.install".loc
+    }
     
     private var primaryColor: Color {
         guard dynamicColors else { return Color("FontColor") }
@@ -1043,13 +1069,22 @@ private struct LCSourceAppBanner: View {
             Button {
                 installAction(app)
             } label: {
-                Text("lc.common.install".loc)
-                    .bold()
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .frame(height: 32)
-                    .minimumScaleFactor(0.1)
+                Group {
+                    if isInstalling {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                    } else {
+                        Text(actionTitle)
+                            .bold()
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.1)
+                    }
+                }
+                .frame(height: 32)
             }
+            .disabled(installer.progressVisible)
             .buttonStyle(BasicButtonStyle())
             .padding()
             .frame(idealWidth: 70)
