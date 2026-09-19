@@ -695,10 +695,11 @@ struct LCSourcesView: View {
     
     @MainActor
     private func install(app: AltStoreSourceApp, sourceURL: URL) {
-        guard let version = app.latestVersion, let downloadURL = version.downloadURL else {
+        guard let version = app.latestVersion else {
             errorMessage = "lc.sources.error.missingDownload".loc
             return
         }
+        let downloadURL = version.downloadURL
         if AnderCatalog.installedApp(for: app.bundleIdentifier) != nil, !AnderCatalog.hasUpdate(for: app) {
             // Already installed and up to date: show it where it lives.
             withAnimation { DataManager.shared.model.selectedTab = .apps }
