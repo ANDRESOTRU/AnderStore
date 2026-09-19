@@ -89,14 +89,17 @@ final class XPCSignInHandler: SignInHandler, AnisetteServerHandler, @unchecked S
 
     func resolvePostAuth() async {}
 
+    // IMPORTANT: signing in must never revoke a certificate or reinstall the app.
+    // Revoking the certificate that signs AnderStore makes iOS refuse to launch it, and
+    // reinstalling the running app breaks the XPC connection. Both actions belong to the
+    // explicit buttons: "Refresh now" and "Update AnderStore".
+
     func resolveRevocation(certificates: [ALTX509Certificate], teamType: ALTTeamType) async throws -> RevokeDecision {
-        // Revoke only certificates created by AnderStore itself; keep certificates of other tools.
-        let ours = certificates.filter { ($0.machineName ?? $0.name).lowercased().contains("anderstore") }
-        return ours.isEmpty ? .keepExisting : .revokeSelected(ours)
+        .keepExisting
     }
 
     func resolveResign(mismatchReason: CodeSignValidationReason, context: StandaloneOperationContext) async throws -> Bool {
-        true
+        false
     }
 
     func complete() async {}

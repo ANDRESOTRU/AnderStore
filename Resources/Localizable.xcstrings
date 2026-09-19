@@ -33728,6 +33728,159 @@
           }
         }
       }
+    },
+    "lc.account.errorTooMany" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple has temporarily limited sign-ins because of too many attempts. Wait 30–60 minutes and try once."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple временно ограничил вход из-за частых попыток. Подождите 30–60 минут и попробуйте один раз."
+          }
+        }
+      }
+    },
+    "lc.account.errorCancelled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign-in was interrupted. Try again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вход прерван. Попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "lc.account.errorRevoked" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The certificate was revoked. Reinstall AnderStore with the installer on your computer."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сертификат отозван. Переустановите AnderStore через программу на компьютере."
+          }
+        }
+      }
+    },
+    "lc.account.errorCertLimit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple has no free certificate slots left for this Apple ID. Remove an old certificate in Settings → Certificates."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "У Apple не осталось свободных сертификатов для этого Apple ID. Удалите старый в «Настройки → Сертификаты»."
+          }
+        }
+      }
+    },
+    "lc.update.check" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check for updates"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверить обновления"
+          }
+        }
+      }
+    },
+    "lc.update.checking" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверяем…"
+          }
+        }
+      }
+    },
+    "lc.update.checkFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not reach the store. Check your internet connection."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось связаться с магазином. Проверьте интернет."
+          }
+        }
+      }
+    },
+    "lc.update.upToDate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have the latest version (%@)."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "У вас последняя версия (%@)."
+          }
+        }
+      }
+    },
+    "lc.account.waitBeforeRetry" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please wait about %lld min before trying again — Apple limits frequent sign-ins."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подождите примерно %lld мин — Apple ограничивает частые попытки входа."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

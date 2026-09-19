@@ -559,6 +559,18 @@ enum AnderAccountAPI {
     /// Turns technical errors from Core into short Russian/English hints.
     static func friendly(_ error: String) -> String {
         let lower = error.lowercased()
+        if lower.contains("429") || lower.contains("too many requests") {
+            return "lc.account.errorTooMany".loc
+        }
+        if lower.contains("cancellationerror") || lower.contains("cancelled") || lower.contains("canceled") {
+            return "lc.account.errorCancelled".loc
+        }
+        if lower.contains("revoked") {
+            return "lc.account.errorRevoked".loc
+        }
+        if lower.contains("certificate") && (lower.contains("limit") || lower.contains("maximum")) {
+            return "lc.account.errorCertLimit".loc
+        }
         if lower.contains("password") || lower.contains("incorrect") || lower.contains("-22406") {
             return "lc.account.errorPassword".loc
         }
@@ -584,6 +596,8 @@ struct AnderAccountView: View {
     @AppStorage("anderLatestVersion") private var latestVersion = ""
     @AppStorage("anderLatestNotes") private var latestNotes = ""
     @AppStorage("anderLastAutoRefresh") private var lastAutoRefresh = 0.0
+    @State private var updateCheckState: String? = nil
+    @AppStorage("anderSignInBlockedUntil") private var signInBlockedUntil = 0.0
     private var updateAvailable: Bool { !latestVersion.isEmpty && AnderUpdateChecker.isNewer(latestVersion, than: AnderUpdateChecker.currentVersion) }
 
     @EnvironmentObject private var sharedModel: SharedModel
@@ -616,6 +630,7 @@ struct AnderAccountView: View {
                         updateCard
                     }
                     signatureCard
+                    updateCheckRow
                     accountCard
                     if case .needsCode(let prompt) = phase {
                         codeCard(prompt: prompt)
@@ -685,6 +700,40 @@ struct AnderAccountView: View {
         }
     }
 
+    private var updateCheckRow: some View {
+        VStack(spacing: 8) {
+            Button {
+                updateCheckState = "lc.update.checking".loc
+                AnderUpdateChecker.fetchLatest { version, notes in
+                    guard let version else {
+                        updateCheckState = "lc.update.checkFailed".loc
+                        return
+                    }
+                    latestVersion = version
+                    latestNotes = notes ?? ""
+                    updateCheckState = AnderUpdateChecker.isNewer(version, than: AnderUpdateChecker.currentVersion)
+                        ? nil
+                        : String(format: "lc.update.upToDate".loc, AnderUpdateChecker.currentVersion)
+                }
+            } label: {
+                HStack {
+                    Label("lc.update.check".loc, systemImage: "arrow.triangle.2.circlepath")
+                    Spacer()
+                    Text(AnderUpdateChecker.currentVersion).foregroundStyle(.secondary)
+                }
+                .font(.body)
+                .foregroundColor(AnderTheme.accent)
+            }
+            if let updateCheckState {
+                Text(updateCheckState)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .anderCard()
+    }
+
     private var updateCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
@@ -729,6 +778,7 @@ struct AnderAccountView: View {
     /// Продлевает подпись сама, когда осталось мало дней (не чаще раза в 6 часов).
     private func autoRefreshIfNeeded() {
         guard coreAvailable, signedIn, !busy,
+              signInCooldown == 0,
               let expiration,
               AnderSignature.daysLeft(until: expiration) <= 3,
               Date().timeIntervalSince1970 - lastAutoRefresh > 6 * 3600
@@ -751,9 +801,18 @@ struct AnderAccountView: View {
 
     // MARK: Actions
 
+    private var signInCooldown: Int {
+        max(0, Int(signInBlockedUntil - Date().timeIntervalSince1970))
+    }
+
     private func signIn() {
         let appleID = email.trimmingCharacters(in: .whitespaces)
         guard !appleID.isEmpty, !password.isEmpty else { return }
+        if signInCooldown > 0 {
+            let minutes = (signInCooldown + 59) / 60
+            message = String(format: "lc.account.waitBeforeRetry".loc, minutes)
+            return
+        }
         guard coreAvailable else {
             message = "lc.account.errorNoExtension".loc
             return
@@ -768,8 +827,13 @@ struct AnderAccountView: View {
             password = ""
             if let error {
                 message = AnderAccountAPI.friendly(error)
+                // Apple ограничивает вход при частых попытках — сами держим паузу
+                let lower = error.lowercased()
+                let pause: TimeInterval = (lower.contains("429") || lower.contains("too many requests")) ? 30 * 60 : 60
+                signInBlockedUntil = Date().timeIntervalSince1970 + pause
                 return
             }
+            signInBlockedUntil = 0
             savedAppleID = account ?? appleID
             showSignInForm = false
             certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
@@ -932,7 +996,7 @@ struct AnderAccountView: View {
                     .background(AnderTheme.accent)
                     .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
                 }
-                .disabled(busy || email.isEmpty || password.isEmpty)
+                .disabled(busy || email.isEmpty || password.isEmpty || signInCooldown > 0)
                 Text("lc.account.privacy".loc).font(.caption).foregroundStyle(.secondary)
             }
             .anderCard()
@@ -1096,6 +1160,8 @@ struct AnderWelcomeView: View {
 
 // MARK: - About screen (required legal notices: AGPL-3.0 / MIT)
 struct AnderAboutView: View {
+    @State private var updateState: String? = nil
+
     private struct License: Identifiable {
         let id = UUID()
         let project: String
@@ -1124,6 +1190,26 @@ struct AnderAboutView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
                 .listRowBackground(Color.clear)
+            }
+
+            Section {
+                Button {
+                    updateState = "lc.update.checking".loc
+                    AnderUpdateChecker.fetchLatest { version, _ in
+                        guard let version else {
+                            updateState = "lc.update.checkFailed".loc
+                            return
+                        }
+                        updateState = AnderUpdateChecker.isNewer(version, than: AnderUpdateChecker.currentVersion)
+                            ? String(format: "lc.update.available".loc, version) + " — " + "lc.tabView.account".loc
+                            : String(format: "lc.update.upToDate".loc, AnderUpdateChecker.currentVersion)
+                    }
+                } label: {
+                    Label("lc.update.check".loc, systemImage: "arrow.triangle.2.circlepath")
+                }
+                if let updateState {
+                    Text(updateState).font(.footnote).foregroundStyle(.secondary)
+                }
             }
 
             Section {
