@@ -372,12 +372,23 @@ enum AltStoreSourceLoader {
         )
     }
     
+    /// AnderStore itself stays in the catalog (self-update reads it from source.json),
+    /// but it is never shown in the Store tab — installing the store inside the store makes no sense.
+    private static func isSelf(_ bundleIdentifier: String) -> Bool {
+        let own = AnderUpdateChecker.bundleIdentifier
+        if bundleIdentifier == own || bundleIdentifier.hasPrefix(own + ".") {
+            return true
+        }
+        return bundleIdentifier == Bundle.main.bundleIdentifier
+    }
+
     private static func buildApp(from response: AltStoreSourceAppResponse, baseURL: URL, fallbackTint: String?) -> AltStoreSourceApp? {
         guard let name = response.name,
-              let bundleIdentifier = response.bundleIdentifier else {
+              let bundleIdentifier = response.bundleIdentifier,
+              !isSelf(bundleIdentifier) else {
             return nil
         }
-        
+
         let versions = buildVersions(from: response, baseURL: baseURL)
         let latest = versions.first ?? buildLegacyVersion(from: response, baseURL: baseURL)
         
