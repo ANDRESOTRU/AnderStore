@@ -39,14 +39,14 @@ struct LCTabView: View {
                     Label("lc.tabView.apps".loc, systemImage: "square.grid.2x2.fill")
                 }
                 .tag(LCTabIdentifier.apps)
-            if UserDefaults.sideStoreExist() {
-                AnderAccountView()
-                    .tabItem {
-                        Label("lc.tabView.account".loc, systemImage: "person.crop.circle.fill")
-                    }
-                    .badge(!anderLatestVersion.isEmpty && AnderUpdateChecker.isNewer(anderLatestVersion, than: AnderUpdateChecker.currentVersion) ? 1 : 0)
-                    .tag(LCTabIdentifier.account)
-            }
+            // Always present: when Core is missing the screen explains it, instead of the
+            // whole section quietly disappearing.
+            AnderAccountView()
+                .tabItem {
+                    Label("lc.tabView.device".loc, systemImage: "iphone")
+                }
+                .badge(!anderLatestVersion.isEmpty && AnderUpdateChecker.isNewer(anderLatestVersion, than: AnderUpdateChecker.currentVersion) ? 1 : 0)
+                .tag(LCTabIdentifier.account)
             LCSettingsView()
                 .tabItem {
                     Label("lc.tabView.settings".loc, systemImage: "gearshape.fill")
@@ -662,6 +662,7 @@ struct AnderAccountView: View {
     @AppStorage("anderVPNInstalled") private var vpnInstalled = false
     @AppStorage("anderAppleID") private var savedAppleID = ""
 
+    @ObservedObject private var state = AnderState.shared
     @State private var expiration: Date? = nil
     @State private var certificateReady = false
     @State private var coreAvailable = true
@@ -724,7 +725,7 @@ struct AnderAccountView: View {
                 .padding(16)
             }
             .background(AnderTheme.background.ignoresSafeArea())
-            .navigationTitle("lc.tabView.account".loc)
+            .navigationTitle("lc.tabView.device".loc)
             .onAppear(perform: reload)
         }
     }
@@ -853,6 +854,8 @@ struct AnderAccountView: View {
         if let expiration {
             AnderSignature.scheduleReminders(expiration: expiration)
         }
+        // Paints from the cached snapshot; only goes to Core when that snapshot is old.
+        state.refresh()
         autoRefreshIfNeeded()
         // Core is started only by the Sign in / Refresh buttons, never on opening the tab
     }
@@ -894,6 +897,7 @@ struct AnderAccountView: View {
             savedAppleID = account ?? appleID
             showSignInForm = false
             certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
+            state.invalidate()
         })
         if !started {
             phase = .idle
@@ -923,6 +927,7 @@ struct AnderAccountView: View {
             } else {
                 certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
                 expiration = AnderSignature.expirationDate()
+                state.invalidate()
             }
         })
         if !started {
@@ -1011,6 +1016,14 @@ struct AnderAccountView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("lc.account.signedInAs".loc).font(.footnote).foregroundStyle(.secondary)
                     Text(savedAppleID).font(.body.weight(.medium))
+                    if let team = state.account.team, !team.isEmpty {
+                        Text(team).font(.caption).foregroundStyle(.secondary)
+                    }
+                    if state.account.isFreeAccount {
+                        Text("lc.device.freeAccount".loc)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Button("lc.account.change".loc) {

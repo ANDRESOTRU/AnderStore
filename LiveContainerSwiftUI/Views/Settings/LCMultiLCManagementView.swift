@@ -22,27 +22,31 @@ private struct LaunchPriorityLC: Identifiable, Hashable {
 
 private let knownLiveContainers = [
     LaunchPriorityLC(scheme: "livecontainer", displayName: "AnderStore"),
-    LaunchPriorityLC(scheme: "livecontainer2", displayName: "LiveContainer2"),
-    LaunchPriorityLC(scheme: "livecontainer3", displayName: "LiveContainer3")
+    LaunchPriorityLC(scheme: "livecontainer2", displayName: "AnderStore 2"),
+    LaunchPriorityLC(scheme: "livecontainer3", displayName: "AnderStore 3")
 ]
 
 struct InstallAnotherLCButton : View {
+    /// Technical name: it becomes the bundle name and the url scheme, so it cannot change.
     @State var lcName : String
+    /// What the user sees.
+    let displayName : String
     @State var detected = false
     let delegate : InstallAnotherLCButtonDelegate
-    
-    init(lcName: String, delegate: InstallAnotherLCButtonDelegate) {
+
+    init(lcName: String, displayName: String, delegate: InstallAnotherLCButtonDelegate) {
         self._lcName = State(initialValue: lcName)
+        self.displayName = displayName
         self._detected = State(initialValue: UIApplication.shared.canOpenURL(URL(string: "\(lcName.lowercased())://")!))
         self.delegate = delegate
     }
-    
+
     var body: some View {
         Button {
             Task { await delegate.installAnotherLC(name: lcName)}
         } label: {
             HStack {
-                Text(lcName)
+                Text(displayName)
                 Spacer()
                 if detected {
                     Text("✓")
@@ -82,8 +86,8 @@ struct LCMultiLCManagementView : View, InstallAnotherLCButtonDelegate {
     var body: some View {
         Form {
             Section {
-                InstallAnotherLCButton(lcName: "LiveContainer2", delegate: self)
-                InstallAnotherLCButton(lcName: "LiveContainer3", delegate: self)
+                InstallAnotherLCButton(lcName: "LiveContainer2", displayName: "AnderStore 2", delegate: self)
+                InstallAnotherLCButton(lcName: "LiveContainer3", displayName: "AnderStore 3", delegate: self)
             } header: {
                 Text("lc.settings.multiLCInstall".loc)
             }
@@ -117,7 +121,9 @@ struct LCMultiLCManagementView : View, InstallAnotherLCButtonDelegate {
             reloadLaunchPriorityItems()
         }
         .alert("lc.settings.multiLCInstall".loc, isPresented: $installLC2Alert.show) {
-            if(UserDefaults.sideStoreExist()) {
+            // Installing through the background service shows its own interface, so it stays
+            // out of the way until the install pipeline moves inside AnderStore.
+            if UserDefaults.sideStoreExist() && DataManager.shared.model.developerMode {
                 Button {
                     installLC2Alert.close(result: 2)
                 } label: {

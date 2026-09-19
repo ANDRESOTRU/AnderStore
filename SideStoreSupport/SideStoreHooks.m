@@ -149,7 +149,8 @@ static void SSInstallVersionWindow(UIWindowScene *windowScene)
     char iosBuild[32];
     sysctlbyname("kern.osversion", iosBuild, &size, NULL, 0);
     bool isPhone = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone;
-    NSString* allVersionString = [NSString stringWithFormat:isPhone ? @"LC %@, SS %@\niOS %@ (%s)" : @"LC %@, SS %@, iOS %@ (%s)", LCVersion, SSVersion, osVersion, iosBuild];
+    // Only shown on the developer-only path where Core runs with its own window.
+    NSString* allVersionString = [NSString stringWithFormat:isPhone ? @"AnderStore %@ / %@\niOS %@ (%s)" : @"AnderStore %@ / %@, iOS %@ (%s)", LCVersion, SSVersion, osVersion, iosBuild];
 
     UILabel* versionLabel = [UILabel new];
     versionLabel.translatesAutoresizingMaskIntoConstraints = NO;

@@ -81,7 +81,7 @@ struct LCEntitlementView : View {
                         .font(.system(.subheadline, design: .monospaced))
                 }
             }
-            .navigationTitle(isLiveProcess ? "LiveProcess Entitlements" : "AnderStore Entitlements")
+            .navigationTitle(isLiveProcess ? "lc.jitlessDiag.serviceEntitlements".loc : "lc.jitlessDiag.appEntitlements".loc)
             .navigationBarTitleDisplayMode(.inline)
         } else {
             Text("lc.common.loading".loc)
@@ -229,13 +229,13 @@ struct LCJITLessDiagnoseView : View {
                     NavigationLink {
                         LCEntitlementView(isLiveProcess: false)
                     } label: {
-                        Text("AnderStore Entitlements".loc)
+                        Text("lc.jitlessDiag.appEntitlements".loc)
                     }
                     if sharedModel.multiLCStatus == 0 {
                         NavigationLink {
                             LCEntitlementView(isLiveProcess: true)
                         } label: {
-                            Text("LiveProcess Entitlements".loc)
+                            Text("lc.jitlessDiag.serviceEntitlements".loc)
                         }
                     }
                 }
@@ -412,7 +412,7 @@ struct LCJITLessDiagnoseView : View {
     }
     
     func getHelp() {
-        UIApplication.shared.open(URL(string: "https://livecontainer.github.io/docs/faq/jit-less-mode-setup")!)
+        UIApplication.shared.open(URL(string: "https://store.andresot.uk/help")!)
     }
     
     func validateCertificate() {
