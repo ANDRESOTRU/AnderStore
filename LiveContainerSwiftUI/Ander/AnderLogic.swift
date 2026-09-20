@@ -70,6 +70,68 @@ enum AnderHomeShortcutURL {
     }
 }
 
+struct AnderLatestUpdate: Equatable {
+    let version: String
+    let notes: String?
+}
+
+enum AnderLatestUpdateParser {
+    private struct GitHubRelease: Decodable {
+        struct Asset: Decodable {
+            let name: String
+            let digest: String?
+            let browserDownloadURL: String
+
+            enum CodingKeys: String, CodingKey {
+                case name, digest
+                case browserDownloadURL = "browser_download_url"
+            }
+        }
+
+        let tagName: String
+        let body: String?
+        let draft: Bool
+        let prerelease: Bool
+        let assets: [Asset]
+
+        enum CodingKeys: String, CodingKey {
+            case body, draft, prerelease, assets
+            case tagName = "tag_name"
+        }
+    }
+
+    static func updatesManifest(_ data: Data) -> AnderLatestUpdate? {
+        guard let manifest = try? JSONDecoder().decode(AnderUpdatesManifest.self, from: data),
+              let url = manifest.anderstore.url,
+              URL(string: url) != nil,
+              validSHA256(manifest.anderstore.sha256) else { return nil }
+        return AnderLatestUpdate(version: manifest.anderstore.version,
+                                 notes: manifest.anderstore.notes)
+    }
+
+    static func githubRelease(_ data: Data) -> AnderLatestUpdate? {
+        guard let release = try? JSONDecoder().decode(GitHubRelease.self, from: data),
+              !release.draft, !release.prerelease,
+              release.tagName.hasPrefix("v"),
+              let asset = release.assets.first(where: { $0.name == "AnderStore.ipa" }),
+              URL(string: asset.browserDownloadURL) != nil,
+              validGitHubDigest(asset.digest) else { return nil }
+        let version = String(release.tagName.dropFirst())
+        guard !version.isEmpty else { return nil }
+        return AnderLatestUpdate(version: version, notes: release.body)
+    }
+
+    private static func validGitHubDigest(_ value: String?) -> Bool {
+        guard let value, value.hasPrefix("sha256:") else { return false }
+        return validSHA256(String(value.dropFirst("sha256:".count)))
+    }
+
+    private static func validSHA256(_ value: String?) -> Bool {
+        guard let value, value.count == 64 else { return false }
+        return value.allSatisfy { $0.isHexDigit }
+    }
+}
+
 enum AnderVersioning {
     static func isNewer(version: String,
                         build: String?,

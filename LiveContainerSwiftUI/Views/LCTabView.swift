@@ -332,10 +332,10 @@ enum AnderTheme {
     }
 }
 
-// MARK: - AnderStore self-update check (reads store.andresot.uk, no Core needed)
+// MARK: - AnderStore self-update check (server manifest with stable GitHub fallback)
 enum AnderUpdateChecker {
-    static let sourceURL = URL(string: "https://store.andresot.uk/source.json")!
-    static let bundleIdentifier = "com.kdt.livecontainer"
+    static let updatesURL = URL(string: "https://store.andresot.uk/updates.json")!
+    static let githubLatestURL = URL(string: "https://api.github.com/repos/ANDRESOTRU/AnderStore/releases/latest")!
 
     static var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
@@ -353,26 +353,35 @@ enum AnderUpdateChecker {
         return false
     }
 
-    /// Fetches the newest AnderStore version from the store. Calls back on the main thread.
+    /// Fetches the newest stable version. Redirects, HTML and incomplete server manifests fall
+    /// back to GitHub's latest stable release. Both sources must provide a valid SHA-256.
     static func fetchLatest(completion: @escaping (_ version: String?, _ notes: String?) -> Void) {
-        var request = URLRequest(url: sourceURL)
+        fetch(updatesURL) { data in
+            if let data, let update = AnderLatestUpdateParser.updatesManifest(data) {
+                DispatchQueue.main.async { completion(update.version, update.notes) }
+                return
+            }
+            fetch(githubLatestURL) { data in
+                let update = data.flatMap(AnderLatestUpdateParser.githubRelease)
+                DispatchQueue.main.async { completion(update?.version, update?.notes) }
+            }
+        }
+    }
+
+    private static func fetch(_ url: URL, completion: @escaping (Data?) -> Void) {
+        var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 15
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            var version: String?
-            var notes: String?
-            if let data,
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let apps = json["apps"] as? [[String: Any]],
-               let app = apps.first(where: { ($0["bundleIdentifier"] as? String) == bundleIdentifier }) {
-                if let versions = app["versions"] as? [[String: Any]], let latest = versions.first {
-                    version = latest["version"] as? String
-                    notes = latest["localizedDescription"] as? String
-                } else {
-                    version = app["version"] as? String
-                }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("AnderStore/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard error == nil,
+                  let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                completion(nil)
+                return
             }
-            DispatchQueue.main.async { completion(version, notes) }
+            completion(data)
         }.resume()
     }
 

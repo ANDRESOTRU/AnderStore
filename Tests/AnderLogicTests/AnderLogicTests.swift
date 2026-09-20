@@ -3,6 +3,22 @@ import XCTest
 @testable import AnderLogic
 
 final class AnderLogicTests: XCTestCase {
+    func testUpdatesManifestRequiresArtifactIntegrity() throws {
+        let good = Data(#"{"anderstore":{"version":"1.6.23","url":"https://example.test/AnderStore.ipa","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","notes":"Fix"},"core":{"version":"1"},"liveContainer":{"version":"1"},"installer":{"version":"1"}}"#.utf8)
+        XCTAssertEqual(AnderLatestUpdateParser.updatesManifest(good)?.version, "1.6.23")
+
+        let missingHash = Data(#"{"anderstore":{"version":"1.6.23","url":"https://example.test/AnderStore.ipa"},"core":{"version":"1"},"liveContainer":{"version":"1"},"installer":{"version":"1"}}"#.utf8)
+        XCTAssertNil(AnderLatestUpdateParser.updatesManifest(missingHash))
+    }
+
+    func testGitHubFallbackAcceptsOnlyStableExactAssetWithDigest() throws {
+        let release = Data(#"{"tag_name":"v1.6.23","body":"Fix","draft":false,"prerelease":false,"assets":[{"name":"AnderStore.ipa","digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","browser_download_url":"https://example.test/AnderStore.ipa"}]}"#.utf8)
+        XCTAssertEqual(AnderLatestUpdateParser.githubRelease(release)?.version, "1.6.23")
+
+        let nightly = Data(#"{"tag_name":"nightly","body":"","draft":false,"prerelease":true,"assets":[{"name":"AnderStore.ipa","digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","browser_download_url":"https://example.test/AnderStore.ipa"}]}"#.utf8)
+        XCTAssertNil(AnderLatestUpdateParser.githubRelease(nightly))
+    }
+
     func testDeviceStatusKeepsPairingValidWhenVPNIsUnavailable() {
         let status = AnderDeviceStatusLogic.evaluate(pairing: .valid, minimuxerFailure: "noVPN")
         XCTAssertEqual(status.pairing, .valid)
