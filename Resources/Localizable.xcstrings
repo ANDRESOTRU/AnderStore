@@ -33882,6 +33882,57 @@
         }
       }
     },
+    "lc.update.installed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The update was installed. Open AnderStore again if it closes."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновление установлено. Если AnderStore закроется, откройте его снова."
+          }
+        }
+      }
+    },
+    "lc.update.needsPairing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The update cannot be installed because the pairing file is missing or invalid. Connect the iPhone to the computer and run the AnderStore installer again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновление нельзя установить: файл сопряжения отсутствует или недействителен. Подключите iPhone к компьютеру и снова запустите установщик AnderStore."
+          }
+        }
+      }
+    },
+    "lc.update.needsVPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on LocalDevVPN before installing the update."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перед установкой обновления включите LocalDevVPN."
+          }
+        }
+      }
+    },
     "lc.update.needSignIn" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -33895,6 +33946,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Сначала войдите в Apple ID."
+          }
+        }
+      }
+    },
+    "lc.update.notFound" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The requested AnderStore version was not found in the official catalog. Check for updates again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Запрошенная версия AnderStore не найдена в официальном каталоге. Проверьте обновления ещё раз."
+          }
+        }
+      }
+    },
+    "lc.update.notInstalled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core did not install the update. Check the pairing file and LocalDevVPN, then try again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core не установил обновление. Проверьте файл сопряжения и LocalDevVPN, затем повторите попытку."
           }
         }
       }

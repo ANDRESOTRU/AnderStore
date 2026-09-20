@@ -317,6 +317,11 @@ enum AltStoreSourceLoader {
         if bundleIdentifier == own || bundleIdentifier.hasPrefix(own + ".") {
             return true
         }
+        // Core keeps this historical identifier for existing Keychain/CoreData records.
+        // Some catalogs may expose an alias for self-update compatibility; never show it.
+        if bundleIdentifier == "com.SideStore.SideStore" {
+            return true
+        }
         return bundleIdentifier == Bundle.main.bundleIdentifier
     }
 

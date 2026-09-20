@@ -550,15 +550,19 @@ enum AnderAccountAPI {
     }
 
     @discardableResult
-    static func updateSelf(progress: @escaping (Double) -> Void,
-                           completion: @escaping (AnderCoreFailure?) -> Void) -> Bool {
+    static func updateSelf(version: String,
+                           progress: @escaping (Double) -> Void,
+                           completion: @escaping (Bool?, AnderCoreFailure?) -> Void) -> Bool {
         perform("self.update",
+                params: ["version": version],
                 onEvent: { event in
                     if event["kind"] as? String == "progress", let value = event["value"] as? Double {
                         progress(value)
                     }
                 },
-                completion: { _, failure in completion(failure) })
+                completion: { response, failure in
+                    completion(response?["updated"] as? Bool, failure)
+                })
     }
 
     @discardableResult
@@ -640,6 +644,8 @@ enum AnderAccountAPI {
             return "lc.certificateSync.notFound".loc
         case "invalidCertificate":
             return "lc.settings.invalidCertError".loc
+        case "updateNotFound":
+            return "lc.update.notFound".loc
         case "needsAuth":
             return "lc.account.errorPassword".loc
         case "noVPN", "needsMinimuxer", "noConnection", "needsPairing", "noDevice", "timedOut":
@@ -820,16 +826,28 @@ struct AnderAccountView: View {
             message = "lc.account.errorNoExtension".loc
             return
         }
+        guard state.pairingReady else {
+            message = "lc.update.needsPairing".loc
+            showSetupInstructions = true
+            return
+        }
+        guard state.vpnReady else {
+            message = "lc.update.needsVPN".loc
+            showSetupInstructions = true
+            return
+        }
         message = nil
         phase = .updating(0)
-        let started = AnderAccountAPI.updateSelf(progress: { value in
+        let started = AnderAccountAPI.updateSelf(version: latestVersion, progress: { value in
             phase = .updating(value)
-        }, completion: { failure in
+        }, completion: { updated, failure in
             phase = .idle
             if let failure {
                 message = AnderAccountAPI.friendly(failure)
+            } else if updated == false {
+                message = "lc.update.notInstalled".loc
             } else {
-                message = nil
+                message = "lc.update.installed".loc
                 latestNotes = ""
             }
         })

@@ -15,6 +15,12 @@ import SideSign
 @objc(AnderCoreBridge)
 final class AnderCoreBridge: NSObject {
 
+    /// The public AnderStore IPA keeps LiveContainer's bundle identifier. Core deliberately
+    /// keeps its historical SideStore identifiers for Keychain/CoreData compatibility, so
+    /// self-update must bridge the two identities explicitly instead of relying on the
+    /// InstalledApp.storeApp relationship.
+    private static let anderStoreCatalogBundleIdentifier = "com.kdt.livecontainer"
+
     /// Bumped together with AnderCoreService.protocolVersion when the envelope changes shape.
     private static let protocolVersion = 3
 
@@ -82,7 +88,9 @@ final class AnderCoreBridge: NSObject {
             snapshot(fields: fields) { result in completion(result, nil) }
 
         case "self.update":
-            updateSelf(onEvent: onEvent, completion: completion)
+            updateSelf(expectedVersion: request["version"] as? String,
+                       onEvent: onEvent,
+                       completion: completion)
 
         case "apps.refresh":
             refreshApps(onEvent: onEvent, completion: completion)
@@ -268,10 +276,16 @@ final class AnderCoreBridge: NSObject {
     }
 
     /// Updates AnderStore itself from the AnderStore source (store.andresot.uk/source.json).
-    private static func updateSelf(onEvent: @escaping ([String: Any]) -> Void,
+    private static func updateSelf(expectedVersion: String?,
+                                   onEvent: @escaping ([String: Any]) -> Void,
                                    completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
-        AppManager.shared.updateAllSources { _ in
+        AppManager.shared.updateAllSources { sourceResult in
             DispatchQueue.main.async {
+                if case .failure(let error) = sourceResult {
+                    completion(nil, errorPayload(error))
+                    return
+                }
+
                 let context = DatabaseManager.shared.viewContext
                 let predicate = NSPredicate(format: "%K == %@", #keyPath(InstalledApp.bundleIdentifier), StoreApp.altstoreAppID)
                 guard let installedApp = InstalledApp.first(satisfying: predicate, in: context) else {
@@ -279,16 +293,40 @@ final class AnderCoreBridge: NSObject {
                                      "message": "AnderStore was not found in the list of installed apps"])
                     return
                 }
-                guard installedApp.hasUpdate else {
-                    completion(["updated": false], nil)
+
+                let catalogPredicate = NSPredicate(format: "%K == %@",
+                                                   #keyPath(StoreApp.bundleIdentifier),
+                                                   anderStoreCatalogBundleIdentifier)
+                guard let catalogApp = StoreApp.first(satisfying: catalogPredicate, in: context) else {
+                    completion(nil, ["kind": "updateNotFound",
+                                     "message": "The official AnderStore catalog entry was not found"])
                     return
                 }
+
+                let targetVersion: AppVersion?
+                if let expectedVersion, !expectedVersion.isEmpty {
+                    targetVersion = catalogApp.versions.first { $0.version == expectedVersion }
+                } else {
+                    targetVersion = catalogApp.latestSupportedVersion
+                }
+                guard let targetVersion else {
+                    completion(nil, ["kind": "updateNotFound",
+                                     "message": "The requested AnderStore version is not available in the official catalog"])
+                    return
+                }
+                guard targetVersion.version != installedApp.version else {
+                    completion(["updated": false, "version": targetVersion.version], nil)
+                    return
+                }
+
                 var observation: NSKeyValueObservation?
-                let updateProgress = AppManager.shared.update(installedApp, presentingViewController: nil) { result in
+                let updateProgress = AppManager.shared.update(installedApp,
+                                                               to: targetVersion,
+                                                               presentingViewController: nil) { result in
                     observation?.invalidate()
                     switch result {
                     case .success:
-                        completion(["updated": true], nil)
+                        completion(["updated": true, "version": targetVersion.version], nil)
                     case .failure(let error):
                         completion(nil, errorPayload(error))
                     }
