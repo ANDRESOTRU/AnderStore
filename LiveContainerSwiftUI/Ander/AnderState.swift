@@ -15,9 +15,17 @@ struct AnderAccountInfo: Equatable {
     var appleID: String?
     var team: String?
     var teamType: Int?
+    var portalSessionState: AnderPortalSessionState = .unknown
 
     /// Free Apple ID (ALTTeamType.free == 1): three apps, ten App IDs a week.
     var isFreeAccount: Bool { teamType == 1 }
+}
+
+enum AnderPortalSessionState: String, Equatable {
+    case unknown
+    case ready
+    case reauthRequired
+    case rateLimited
 }
 
 struct AnderCoreApp: Equatable, Identifiable {
@@ -75,6 +83,9 @@ final class AnderState: ObservableObject {
     @Published private(set) var readiness: AnderReadiness = .checking
     @Published private(set) var vpnReady = false
     @Published private(set) var pairingReady = false
+    @Published private(set) var pairingState: AnderPairingState = .checking
+    @Published private(set) var vpnState: AnderVPNState = .checking
+    @Published private(set) var connectionState: AnderConnectionState = .starting
     @Published private(set) var jitLessReady = false
     @Published private(set) var certificateValid = false
     @Published private(set) var renewalState: AnderRenewalState = .idle
@@ -88,6 +99,8 @@ final class AnderState: ObservableObject {
         loadCache()
         signatureExpiration = AnderSignature.expirationDate()
     }
+
+    private var deviceStatusGeneration = 0
 
     var coreAvailable: Bool { AnderAccountAPI.isAvailable }
 
@@ -200,13 +213,42 @@ final class AnderState: ObservableObject {
     }
 
     func refreshDeviceStatus() {
+        deviceStatusGeneration += 1
+        refreshDeviceStatus(generation: deviceStatusGeneration, attempt: 0)
+    }
+
+    private func refreshDeviceStatus(generation: Int, attempt: Int) {
         guard coreAvailable else { return }
         _ = AnderAccountAPI.perform("device.status") { [weak self] response, _ in
-            guard let self, let response else { return }
-            self.vpnReady = response["vpnReady"] as? Bool ?? false
-            self.pairingReady = response["pairingReady"] as? Bool ?? false
+            guard let self, generation == self.deviceStatusGeneration, let response else { return }
+            self.pairingState = (response["pairingState"] as? String)
+                .flatMap { AnderPairingState(rawValue: $0) }
+                ?? ((response["pairingReady"] as? Bool ?? false) ? .valid : .checking)
+            self.vpnState = (response["vpnState"] as? String)
+                .flatMap { AnderVPNState(rawValue: $0) }
+                ?? ((response["vpnReady"] as? Bool ?? false) ? .connected : .checking)
+            self.connectionState = (response["connectionState"] as? String)
+                .flatMap { AnderConnectionState(rawValue: $0) } ?? .starting
+            self.vpnReady = self.vpnState == .connected
+            self.pairingReady = self.pairingState == .valid
             self.evaluateReadiness()
+
+            if attempt < 3,
+               self.pairingState == .checking || self.connectionState == .starting {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
+                    self?.refreshDeviceStatus(generation: generation, attempt: attempt + 1)
+                }
+            }
         }
+    }
+
+    func markDeviceConnectionReady() {
+        pairingState = .valid
+        vpnState = .connected
+        connectionState = .ready
+        pairingReady = true
+        vpnReady = true
+        evaluateReadiness()
     }
 
     func validateLocalSetup(resignAfterSuccess: Bool = false) {
@@ -240,15 +282,36 @@ final class AnderState: ObservableObject {
     }
 
     func autoRenewIfNeeded(force: Bool = false) {
+        renewSignatures(manual: force)
+    }
+
+    /// Runs the single renewal pipeline used by both foreground automation and the manual
+    /// "renew now" button. Manual requests bypass the age/three-day gates, but never start a
+    /// second Core request while one is already active.
+    func renewSignatures(manual: Bool = true,
+                         completion: ((AnderRenewalState) -> Void)? = nil) {
+        if case .refreshing = renewalState { return }
+        guard coreAvailable else {
+            renewalState = .failed("lc.account.errorNoExtension".loc)
+            completion?(renewalState)
+            return
+        }
+        guard account.signedIn else {
+            renewalState = .failed("lc.account.sessionExpired".loc)
+            completion?(renewalState)
+            return
+        }
+
         let defaults = LCUtils.appGroupUserDefault
         let lastAttempt = defaults.double(forKey: "anderLastAutoRefresh")
-        guard coreAvailable,
-              account.signedIn,
-              let expiration = signatureExpiration,
-              AnderSignature.daysLeft(until: expiration) <= 3,
-              force || Date().timeIntervalSince1970 - lastAttempt > 6 * 3600 else { return }
+        if !manual {
+            guard let expiration = signatureExpiration,
+                  AnderSignature.daysLeft(until: expiration) <= 3,
+                  Date().timeIntervalSince1970 - lastAttempt > 6 * 3600 else { return }
+        }
 
         defaults.set(Date().timeIntervalSince1970, forKey: "anderLastAutoRefresh")
+        certificateSyncState = .idle
         renewalState = .refreshing(0)
         let started = AnderAccountAPI.refresh(progress: { [weak self] value in
             self?.renewalState = .refreshing(value)
@@ -257,8 +320,10 @@ final class AnderState: ObservableObject {
             if let failure {
                 self.renewalState = failure.kind == "noVPN" || failure.kind == "needsMinimuxer"
                     ? .needsVPN : .failed(AnderAccountAPI.friendly(failure))
+                completion?(self.renewalState)
                 return
             }
+            self.markDeviceConnectionReady()
             self.synchronizeCertificate(force: true) { [weak self] syncState in
                 guard let self else { return }
                 switch syncState {
@@ -271,12 +336,14 @@ final class AnderState: ObservableObject {
                 case .failed(let message):
                     self.renewalState = .failed(message)
                 case .idle, .syncing:
-                    break
+                    return
                 }
+                completion?(self.renewalState)
             }
         })
         if !started {
             renewalState = .failed("lc.account.errorNoExtension".loc)
+            completion?(renewalState)
         }
     }
 
@@ -307,11 +374,13 @@ final class AnderState: ObservableObject {
     }
 
     private func evaluateReadiness() {
-        if !account.signedIn { readiness = .needsAccount }
-        else if !certificatePresent && LCSharedUtils.certificatePassword() == nil { readiness = .needsCertificate }
+        if !certificatePresent && LCSharedUtils.certificatePassword() == nil {
+            readiness = account.signedIn ? .needsCertificate : .needsAccount
+        }
         else if !certificateValid { readiness = .invalidCertificate }
-        else if !pairingReady { readiness = .needsPairing }
-        else if !vpnReady { readiness = .needsVPN }
+        else if pairingState == .checking || vpnState == .checking || connectionState == .starting { readiness = .checking }
+        else if pairingState == .missing || pairingState == .invalid { readiness = .needsPairing }
+        else if vpnState == .disconnected || connectionState == .unreachable { readiness = .needsVPN }
         else if !jitLessReady { readiness = .needsJITLess }
         else { readiness = .ready }
     }
@@ -325,6 +394,8 @@ final class AnderState: ObservableObject {
             info.appleID = accountPayload["appleID"] as? String
             info.team = accountPayload["team"] as? String
             info.teamType = accountPayload["teamType"] as? Int
+            info.portalSessionState = (accountPayload["portalSessionState"] as? String)
+                .flatMap { AnderPortalSessionState(rawValue: $0) } ?? .unknown
             account = info
         }
         if let certificatePayload = snapshot["certificate"] as? [String: Any] {
@@ -358,7 +429,8 @@ final class AnderState: ObservableObject {
         if let account = snapshot["account"] as? [String: Any] {
             safe["account"] = [
                 "signedIn": account["signedIn"] as? Bool ?? false,
-                "teamType": account["teamType"] as? Int ?? 0
+                "teamType": account["teamType"] as? Int ?? 0,
+                "portalSessionState": account["portalSessionState"] as? String ?? "unknown"
             ]
         }
         if let certificate = snapshot["certificate"] as? [String: Any] {

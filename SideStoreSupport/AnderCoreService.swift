@@ -64,13 +64,20 @@ public final class AnderCoreService {
     }
 
     /// Bumped when the envelope itself changes shape. Core reports its own in `handshake`.
-    static let protocolVersion = 3
+    static let protocolVersion = 4
 
     /// Only these may be retried automatically after the connection dropped: everything else
     /// either talks to Apple or changes state, and a silent second attempt is how accounts get
     /// rate limited and certificates get burned.
     private static let retryableCommands: Set<String> = [
         "handshake", "snapshot", "account.status", "cert.status", "certificates.active", "device.status"
+    ]
+
+    private static let requiredProtocolCommands: Set<String> = [
+        "snapshot", "account.signIn", "account.submitCode", "account.status", "account.signOut",
+        "self.update", "apps.refresh", "certificates.list", "certificates.active",
+        "certificates.revoke", "certificates.importP12", "certificates.exportP12",
+        "appIDs.list", "appIDs.delete", "profiles.list", "device.status"
     ]
 
     private struct Pending {
@@ -173,12 +180,22 @@ public final class AnderCoreService {
         noteActivity()
         // The handshake is the authoritative liveness check and tells us what this Core can do.
         // A Core built from an older commit simply reports fewer commands.
-        if let response = try? await sendRequest("handshake",
-                                                 params: ["protocolVersion": Self.protocolVersion],
-                                                 onEvent: nil) {
-            coreVersion = response["coreVersion"] as? String
-            supportedCommands = Set(response["supportedCommands"] as? [String] ?? [])
+        let response = try await sendRequest("handshake",
+                                             params: ["protocolVersion": Self.protocolVersion],
+                                             onEvent: nil)
+        let remoteProtocol = response["protocolVersion"] as? Int ?? 0
+        let remoteCommands = Set(response["supportedCommands"] as? [String] ?? [])
+        guard remoteProtocol == Self.protocolVersion else {
+            throw AnderCoreError(kind: "unsupportedProtocol",
+                                 message: "AnderStore and Core protocol versions do not match")
         }
+        let missingCommands = Self.requiredProtocolCommands.subtracting(remoteCommands)
+        guard missingCommands.isEmpty else {
+            throw AnderCoreError(kind: "unsupportedProtocol",
+                                 message: "AnderStore Core is missing required commands: \(missingCommands.sorted().joined(separator: ", "))")
+        }
+        coreVersion = response["coreVersion"] as? String
+        supportedCommands = remoteCommands
     }
 
     private func launch() async throws {

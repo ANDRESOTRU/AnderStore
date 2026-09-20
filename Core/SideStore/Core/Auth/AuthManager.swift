@@ -13,11 +13,21 @@ import CoreData
 
 public final class AuthManager: @unchecked Sendable {
     public static let shared = AuthManager()
+
+    public enum PortalSessionState: String {
+        case unknown
+        case ready
+        case reauthRequired
+        case rateLimited
+    }
     
     private var portalProxy: DeveloperPortalProxyWithAuth {
         DeveloperPortalProxy.shared as! DeveloperPortalProxyWithAuth
     }
     
+    private let portalStateLock = NSLock()
+    private var cachedPortalSessionState: PortalSessionState = .unknown
+
     private init() {}
     
     public var team: ALTTeam?
@@ -25,9 +35,41 @@ public final class AuthManager: @unchecked Sendable {
 
     public var isAuthenticated: Bool {
         let hasEmail = Keychain.shared.appleIDEmailAddress != nil
-        let hasPassword = Keychain.shared.appleIDPassword != nil
+        let hasAdsid = Keychain.shared.appleIDAdsid != nil
         let hasToken = Keychain.shared.appleIDXcodeToken != nil
-        return hasEmail && (hasPassword || hasToken)
+        return hasEmail && hasAdsid && hasToken && portalSessionState != .reauthRequired
+    }
+
+    public var portalSessionState: PortalSessionState {
+        portalStateLock.withLock {
+            if cachedPortalSessionState == .unknown, isStoredPortalCredentialComplete {
+                return .ready
+            }
+            return cachedPortalSessionState
+        }
+    }
+
+    private var isStoredPortalCredentialComplete: Bool {
+        Keychain.shared.appleIDEmailAddress != nil &&
+        Keychain.shared.appleIDAdsid != nil &&
+        Keychain.shared.appleIDXcodeToken != nil
+    }
+
+    public func markPortalSessionReady() {
+        portalStateLock.withLock { cachedPortalSessionState = .ready }
+    }
+
+    /// Invalidates only the Apple portal session. The local signing certificate, team metadata,
+    /// apps and the email hint stay intact, while secrets that could trigger a silent retry are
+    /// discarded.
+    public func expirePortalSession(rateLimited: Bool = false) {
+        session = nil
+        adsid = nil
+        xcodeToken = nil
+        password = nil
+        portalStateLock.withLock {
+            cachedPortalSessionState = rateLimited ? .rateLimited : .reauthRequired
+        }
     }
     
     public var currentAppleID: String? {
@@ -66,6 +108,7 @@ public final class AuthManager: @unchecked Sendable {
     ) {
         self.session = nil
         self.team = nil
+        portalStateLock.withLock { cachedPortalSessionState = .unknown }
         if !keepCertificate {
             debugLog("[AuthManager] Clearing signing certificate in cert manager and keychain.")
             CertificateManager.shared.clearActiveCertificate()

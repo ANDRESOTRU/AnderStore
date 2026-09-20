@@ -250,12 +250,23 @@
 }
 
 - (NSDictionary *)generateWebClipConfigWithContainerId:(NSString*)containerId iconStyle:(GeneratedIconStyle)style{
-    NSString* appClipUrl;
-    if(containerId) {
-        appClipUrl = [NSString stringWithFormat:@"livecontainer://livecontainer-launch?bundle-name=%@&container-folder-name=%@", self.bundlePath.lastPathComponent, containerId];
-    } else {
-        appClipUrl = [NSString stringWithFormat:@"livecontainer://livecontainer-launch?bundle-name=%@", self.bundlePath.lastPathComponent];
+    NSURLComponents *components = [NSURLComponents new];
+    components.scheme = @"livecontainer";
+    components.host = @"livecontainer-launch";
+    NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray arrayWithObject:
+        [NSURLQueryItem queryItemWithName:@"bundle-name" value:self.bundlePath.lastPathComponent]];
+    if(containerId.length > 0) {
+        [queryItems addObject:[NSURLQueryItem queryItemWithName:@"container-folder-name" value:containerId]];
     }
+    components.queryItems = queryItems;
+    NSString *appClipUrl = components.URL.absoluteString;
+    if(appClipUrl.length == 0) return nil;
+    NSString *shortcutScope = containerId.length > 0 ? containerId : @"default";
+    NSCharacterSet *unsafeIdentifierCharacters = [[NSCharacterSet alphanumericCharacterSet] invertedSet];
+    shortcutScope = [[shortcutScope componentsSeparatedByCharactersInSet:unsafeIdentifierCharacters]
+        componentsJoinedByString:@"-"];
+    NSString *profileIdentifier = [NSString stringWithFormat:@"%@.anderstore.webclip.%@",
+        self.bundleIdentifier, shortcutScope];
     
     UIImage* icon = [self generateLiveContainerWrappedIconWithStyle:style];
     
@@ -265,28 +276,28 @@
         @"IgnoreManifestScope": @YES,
         @"IsRemovable": @YES,
         @"Label": self.displayName,
-        @"PayloadDescription": [NSString stringWithFormat:@"Web Clip for launching %@ (%@) in LiveContainer", self.displayName, self.bundlePath.lastPathComponent],
+        @"PayloadDescription": [NSString stringWithFormat:@"Web Clip for launching %@ (%@) in AnderStore", self.displayName, self.bundlePath.lastPathComponent],
         @"PayloadDisplayName": self.displayName,
-        @"PayloadIdentifier": self.bundleIdentifier,
+        @"PayloadIdentifier": profileIdentifier,
         @"PayloadType": @"com.apple.webClip.managed",
         @"PayloadUUID": NSUUID.UUID.UUIDString,
         @"PayloadVersion": @(1),
         @"Precomposed": @NO,
-        @"toPayloadOrganization": @"LiveContainer",
+        @"PayloadOrganization": @"AnderStore",
         @"URL": appClipUrl
     };
     return @{
         @"ConsentText": @{
-            @"default": [NSString stringWithFormat:@"This profile installs a web clip which opens %@ (%@) in LiveContainer", self.displayName, self.bundlePath.lastPathComponent]
+            @"default": [NSString stringWithFormat:@"This profile installs a web clip which opens %@ (%@) in AnderStore", self.displayName, self.bundlePath.lastPathComponent]
         },
         @"PayloadContent": @[payload],
         @"PayloadDescription": payload[@"PayloadDescription"],
         @"PayloadDisplayName": self.displayName,
-        @"PayloadIdentifier": self.bundleIdentifier,
-        @"PayloadOrganization": @"LiveContainer",
+        @"PayloadIdentifier": profileIdentifier,
+        @"PayloadOrganization": @"AnderStore",
         @"PayloadRemovalDisallowed": @(NO),
         @"PayloadType": @"Configuration",
-        @"PayloadUUID": @"345097fb-d4f7-4a34-ab90-2e3f1ad62eed",
+        @"PayloadUUID": NSUUID.UUID.UUIDString,
         @"PayloadVersion": @(1),
     };
 }

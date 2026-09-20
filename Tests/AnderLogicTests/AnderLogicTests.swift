@@ -3,6 +3,40 @@ import XCTest
 @testable import AnderLogic
 
 final class AnderLogicTests: XCTestCase {
+    func testDeviceStatusKeepsPairingValidWhenVPNIsUnavailable() {
+        let status = AnderDeviceStatusLogic.evaluate(pairing: .valid, minimuxerFailure: "noVPN")
+        XCTAssertEqual(status.pairing, .valid)
+        XCTAssertEqual(status.vpn, .disconnected)
+        XCTAssertEqual(status.connection, .unreachable)
+        XCTAssertFalse(status.ready)
+    }
+
+    func testDeviceStatusTreatsMinimuxerStartupAsChecking() {
+        let status = AnderDeviceStatusLogic.evaluate(pairing: .valid, minimuxerFailure: "pairingNotLoaded")
+        XCTAssertEqual(status.pairing, .valid)
+        XCTAssertEqual(status.vpn, .checking)
+        XCTAssertEqual(status.connection, .starting)
+    }
+
+    func testDeviceStatusOnlyInvalidatesConfirmedBadPairing() {
+        let status = AnderDeviceStatusLogic.evaluate(pairing: .valid, minimuxerFailure: "invalidPairing")
+        XCTAssertEqual(status.pairing, .invalid)
+        XCTAssertFalse(status.pairingReady)
+    }
+
+    func testHomeShortcutURLPercentEncodesBundleAndContainer() throws {
+        let url = try XCTUnwrap(AnderHomeShortcutURL.make(
+            bundleName: "Приложение Test.app",
+            containerFolderName: "Основной контейнер & 1"
+        ))
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.queryItems?.first(where: { $0.name == "bundle-name" })?.value,
+                       "Приложение Test.app")
+        XCTAssertEqual(components.queryItems?.first(where: { $0.name == "container-folder-name" })?.value,
+                       "Основной контейнер & 1")
+        XCTAssertTrue(url.absoluteString.contains("%20"))
+    }
+
     func testNumericVersionsAndBuilds() {
         XCTAssertFalse(AnderVersioning.isNewer(version: "1.2.0", build: "10", than: "1.2", currentBuild: "10"))
         XCTAssertTrue(AnderVersioning.isNewer(version: "1.2", build: "11", than: "1.2.0", currentBuild: "10"))

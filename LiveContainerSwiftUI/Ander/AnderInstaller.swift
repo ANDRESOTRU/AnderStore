@@ -50,6 +50,9 @@ final class AnderInstaller: ObservableObject {
     /// Store identifiers still waiting in a sequential batch operation.
     @Published private(set) var queuedStoreBundleIDs: [String] = []
     @Published var errorMessage: String?
+    /// A one-shot offer consumed by the Apps tab after a brand-new install. Replacements and
+    /// updates never set this value.
+    @Published private(set) var pendingShortcutApp: LCAppModel?
 
     var isBusy: Bool { progressVisible }
 
@@ -62,6 +65,10 @@ final class AnderInstaller: ObservableObject {
     private var installObserver: NSKeyValueObservation?
 
     private init() {}
+
+    func consumeShortcutOffer() {
+        pendingShortcutApp = nil
+    }
 
     // MARK: - Entry points
 
@@ -528,6 +535,8 @@ final class AnderInstaller: ObservableObject {
         } else {
             let newAppModel = LCAppModel(appInfo: finalNewApp)
             sharedModel.apps.append(newAppModel)
+            pendingShortcutApp = newAppModel
+            sharedModel.selectedTab = .apps
 
             if let urlSchemes = finalNewApp.urlSchemes(), urlSchemes.count > 0 {
                 UserDefaults.lcShared().mutableArrayValue(forKey: "LCGuestURLSchemes")

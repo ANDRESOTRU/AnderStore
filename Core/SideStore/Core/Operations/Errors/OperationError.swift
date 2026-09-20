@@ -141,9 +141,9 @@ public enum OperationError: LocalizedError, CustomNSError, Sendable, Equatable {
             return "You do not appear to be connected to Wi-Fi!\n\nPlease connect to a Wi-Fi before attempting futher operations"
         case .noVPN(let reason), .invalidVPN(let reason):
             if let reason, !reason.isEmpty {
-                return "VPN Connection Error:\n\(reason)\n\nPlease make sure LocalDevVPN is connected and running properly."
+                return "VPN Connection Error:\n\(reason)\n\nPlease make sure VPN is connected and running properly."
             }
-            return "You do not appear to be connected to VPN.\n\nPlease make sure LocalDevVPN is connected and running! If the issue persists, replace your pairing with iloader or try restarting the device."
+            return "You do not appear to be connected to VPN.\n\nPlease make sure VPN is connected and running! If the issue persists, replace your pairing with iloader or try restarting the device."
         case .noDevice(let reason):
             if let reason, !reason.isEmpty {
                 return "AnderStore is unable to reach the device endpoint:\n\(reason)\n\nPlease check your Connection Configuration in Settings."
@@ -182,7 +182,7 @@ public enum OperationError: LocalizedError, CustomNSError, Sendable, Equatable {
         case .noConnection:
             return NSLocalizedString("Connect to a Wi-Fi network, Bridge or a Wired network connection!", comment: "")
         case .noVPN, .invalidVPN:
-            return NSLocalizedString("Make sure LocalDevVPN is connected and running!", comment: "")
+            return NSLocalizedString("Make sure VPN is connected and running!", comment: "")
         case .invalidPairingFile:
             return NSLocalizedString("Import a valid mobiledevicepairing file.", comment: "")
         case .serverNotFound:

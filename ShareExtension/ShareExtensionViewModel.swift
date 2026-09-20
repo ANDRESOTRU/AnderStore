@@ -500,7 +500,7 @@ final class ShareExtensionViewModel: ObservableObject {
         sharedDefaults?.set(Date(), forKey: "LCLaunchExtensionLaunchDate")
 
         guard var components = URLComponents(string: "livecontainer://livecontainer-launch") else {
-            throw ShareExtensionError("Unable to build SideStore launch URL.")
+            throw ShareExtensionError("Unable to build AnderStore launch URL.")
         }
         var queryItems = [
             URLQueryItem(name: "bundle-name", value: "builtinSideStore")
@@ -510,7 +510,7 @@ final class ShareExtensionViewModel: ObservableObject {
         }
         components.queryItems = queryItems
         guard let launchURL = components.url else {
-            throw ShareExtensionError("Unable to build SideStore launch URL.")
+            throw ShareExtensionError("Unable to build AnderStore launch URL.")
         }
 
         LCShareExtensionLauncher.openURL(fromShareExtension: launchURL)

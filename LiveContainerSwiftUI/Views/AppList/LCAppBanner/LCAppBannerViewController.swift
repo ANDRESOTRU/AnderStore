@@ -40,6 +40,7 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
 
         preferredContentSize = CGSize(width: 0, height: LCAppBannerRootView.bannerHeight)
         bannerView.runControl.addTarget(self, action: #selector(runButtonTapped), for: .touchUpInside)
+        bannerView.shortcutControl.addTarget(self, action: #selector(shortcutButtonTapped), for: .touchUpInside)
         bannerView.addInteraction(UIContextMenuInteraction(delegate: self))
 
         let doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(bannerDoubleTapped))
@@ -109,6 +110,12 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
 
         Task { [weak self] in
             await self?.runApp()
+        }
+    }
+
+    @objc private func shortcutButtonTapped() {
+        Task { [weak self] in
+            await self?.createAppClip()
         }
     }
 
@@ -295,12 +302,10 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
         guard let relativeBundlePath = configuration.model.appInfo.relativeBundlePath else {
             return
         }
-
-        if let folderName = configuration.model.uiSelectedContainer?.folderName {
-            UIPasteboard.general.string = "livecontainer://livecontainer-launch?bundle-name=\(relativeBundlePath)&container-folder-name=\(folderName)"
-        } else {
-            UIPasteboard.general.string = "livecontainer://livecontainer-launch?bundle-name=\(relativeBundlePath)"
-        }
+        UIPasteboard.general.url = AnderHomeShortcutURL.make(
+            bundleName: relativeBundlePath,
+            containerFolderName: configuration.model.uiSelectedContainer?.folderName
+        )
     }
 
     private func createAppClip() async {

@@ -33004,13 +33004,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A free Apple ID signs apps for 7 days. Turn on LocalDevVPN and tap Refresh before it ends."
+            "value" : "A free Apple ID signs apps for 7 days. Turn on VPN and tap Refresh before it ends."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Бесплатный Apple ID подписывает на 7 дней. Включите LocalDevVPN и нажмите «Обновить» до окончания срока."
+            "value" : "Бесплатный Apple ID подписывает на 7 дней. Включите VPN и нажмите «Обновить» до окончания срока."
           }
         }
       }
@@ -33055,13 +33055,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turn on LocalDevVPN, open AnderStore and tap Refresh, or your apps will stop opening."
+            "value" : "Turn on VPN, open AnderStore and tap Refresh, or your apps will stop opening."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Включите LocalDevVPN, откройте AnderStore и нажмите «Обновить», иначе приложения перестанут открываться."
+            "value" : "Включите VPN, откройте AnderStore и нажмите «Обновить», иначе приложения перестанут открываться."
           }
         }
       }
@@ -33191,13 +33191,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Install LocalDevVPN"
+            "value" : "Install VPN"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Установите LocalDevVPN"
+            "value" : "Установите VPN"
           }
         }
       }
@@ -33361,13 +33361,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Every 7 days turn on LocalDevVPN and tap Refresh on the Account tab. AnderStore will remind you."
+            "value" : "Every 7 days turn on VPN and tap Refresh on the Account tab. AnderStore will remind you."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Раз в 7 дней включите LocalDevVPN и нажмите «Обновить» на вкладке «Аккаунт». AnderStore напомнит."
+            "value" : "Раз в 7 дней включите VPN и нажмите «Обновить» на вкладке «Аккаунт». AnderStore напомнит."
           }
         }
       }
@@ -33531,13 +33531,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Refreshing… Keep LocalDevVPN on and don’t close AnderStore."
+            "value" : "Refreshing… Keep VPN on and don’t close AnderStore."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Обновляем… Не выключайте LocalDevVPN и не закрывайте AnderStore."
+            "value" : "Обновляем… Не выключайте VPN и не закрывайте AnderStore."
           }
         }
       }
@@ -33763,19 +33763,40 @@
         }
       }
     },
+    "lc.account.errorRateLimited" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apple temporarily limited sign-ins. Wait 30 minutes and try again." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Apple временно ограничила вход. Подождите 30 минут и попробуйте снова." } }
+      }
+    },
+    "lc.account.sessionExpired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your Apple session has expired. Sign in again to manage the Developer Portal." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сессия Apple истекла. Войдите снова для управления Developer Portal." } }
+      }
+    },
+    "lc.account.signInAgain" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in again" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Войти снова" } }
+      }
+    },
     "lc.account.errorVPN" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No connection to your iPhone. Open LocalDevVPN, tap Connect and try again."
+            "value" : "No connection to your iPhone. Open VPN, tap Connect and try again."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Нет связи с iPhone. Откройте LocalDevVPN, нажмите «Подключить» и попробуйте снова."
+            "value" : "Нет связи с iPhone. Откройте VPN, нажмите «Подключить» и попробуйте снова."
           }
         }
       }
@@ -33854,13 +33875,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Downloading and installing… Keep LocalDevVPN on. AnderStore will close by itself — just open it again."
+            "value" : "Downloading and installing… Keep VPN on. AnderStore will close by itself — just open it again."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Скачиваем и устанавливаем… Не выключайте LocalDevVPN. AnderStore закроется сам — просто откройте его снова."
+            "value" : "Скачиваем и устанавливаем… Не выключайте VPN. AnderStore закроется сам — просто откройте его снова."
           }
         }
       }
@@ -33922,13 +33943,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turn on LocalDevVPN before installing the update."
+            "value" : "Turn on VPN before installing the update."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Перед установкой обновления включите LocalDevVPN."
+            "value" : "Перед установкой обновления включите VPN."
           }
         }
       }
@@ -33973,13 +33994,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Core did not install the update. Check the pairing file and LocalDevVPN, then try again."
+            "value" : "Core did not install the update. Check the pairing file and VPN, then try again."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Core не установил обновление. Проверьте файл сопряжения и LocalDevVPN, затем повторите попытку."
+            "value" : "Core не установил обновление. Проверьте файл сопряжения и VPN, затем повторите попытку."
           }
         }
       }
@@ -34654,13 +34675,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enable LocalDevVPN to renew apps."
+            "value" : "Enable VPN to renew apps."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Включите LocalDevVPN для продления приложений."
+            "value" : "Включите VPN для продления приложений."
           }
         }
       }
@@ -34809,6 +34830,20 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Файл сопряжения отсутствует или недействителен." } }
       }
     },
+    "lc.readiness.pairingMissing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The pairing file is missing." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Файл сопряжения отсутствует." } }
+      }
+    },
+    "lc.readiness.pairingInvalid" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The pairing file is invalid." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Файл сопряжения недействителен." } }
+      }
+    },
     "lc.readiness.needsJITLess" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -34847,15 +34882,15 @@
     "lc.setup.vpnTitle" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect LocalDevVPN" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключите LocalDevVPN" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect VPN" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключите VPN" } }
       }
     },
     "lc.setup.vpnText" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install LocalDevVPN using the AnderStore installer, allow it to add a VPN configuration, then tap Connect. Keep it connected while signing or renewing apps." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Установите LocalDevVPN через установщик AnderStore, разрешите добавить конфигурацию VPN и нажмите «Подключить». Не отключайте VPN во время подписи и продления приложений." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install VPN using the AnderStore installer, allow it to add a VPN configuration, then tap Connect. Keep it connected while signing or renewing apps." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Установите VPN через установщик AnderStore, разрешите добавить конфигурацию VPN и нажмите «Подключить». Не отключайте VPN во время подписи и продления приложений." } }
       }
     },
     "lc.setup.trustTitle" : {
@@ -34946,6 +34981,34 @@
             "value" : "Подождите примерно %lld мин — Apple ограничивает частые попытки входа."
           }
         }
+      }
+    },
+    "lc.shortcut.offerTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add to Home Screen?" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить на экран «Домой»?" } }
+      }
+    },
+    "lc.shortcut.offerMessage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create an icon for “%@” to open it directly from the Home Screen." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать иконку «%@», чтобы открывать приложение прямо с экрана «Домой»." } }
+      }
+    },
+    "lc.shortcut.add" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить" } }
+      }
+    },
+    "lc.shortcut.later" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Later" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Позже" } }
       }
     }
   },

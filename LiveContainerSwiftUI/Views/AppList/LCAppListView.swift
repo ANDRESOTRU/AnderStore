@@ -121,6 +121,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     @State private var isViewAppeared = false
     @State private var updateSummary: String?
     @State private var isUpdatingAll = false
+    @State private var shortcutOffer: LCAppModel?
     
     @ObservedObject var searchContext: SearchContext = SearchContext()
     var sortedApps: [LCAppModel] {
@@ -286,6 +287,9 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 errorShow = true
                 installer.errorMessage = nil
             }
+            .onReceive(installer.$pendingShortcutApp.compactMap { $0 }) { app in
+                shortcutOffer = app
+            }
             
             .navigationTitle("lc.appList.myApps".loc)
             .toolbar {
@@ -368,6 +372,22 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             Button("lc.common.ok".loc) { updateSummary = nil }
         } message: {
             Text(updateSummary ?? "")
+        }
+        .alert("lc.shortcut.offerTitle".loc,
+               isPresented: Binding(get: { shortcutOffer != nil },
+                                    set: { if !$0 { shortcutOffer = nil; installer.consumeShortcutOffer() } })) {
+            Button("lc.shortcut.add".loc) {
+                guard let app = shortcutOffer else { return }
+                shortcutOffer = nil
+                installer.consumeShortcutOffer()
+                Task { await createHomeScreenShortcut(for: app) }
+            }
+            Button("lc.shortcut.later".loc, role: .cancel) {
+                shortcutOffer = nil
+                installer.consumeShortcutOffer()
+            }
+        } message: {
+            Text(String(format: "lc.shortcut.offerMessage".loc, shortcutOffer?.displayName ?? ""))
         }
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { fileUrls in
             Task { await installer.install(.fileURL(fileUrls[0])) }
@@ -883,6 +903,27 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     func installMdm(data: Data) {
         safariViewURL = URL(string:"data:application/x-apple-aspen-config;base64,\(data.base64EncodedString())")!
         safariViewOpened = true
+    }
+
+    @MainActor
+    private func createHomeScreenShortcut(for app: LCAppModel) async {
+        if app.appInfo.isLocked && !sharedModel.isHiddenAppUnlocked {
+            guard (try? await LCUtils.authenticateUser()) == true else { return }
+        }
+        guard let style = await promptForGeneratedIconStyle() else { return }
+        do {
+            guard let profile = app.appInfo.generateWebClipConfig(
+                withContainerId: app.uiSelectedContainer?.folderName,
+                iconStyle: style
+            ) else {
+                throw CocoaError(.propertyListWriteInvalid)
+            }
+            let data = try PropertyListSerialization.data(fromPropertyList: profile, format: .xml, options: 0)
+            installMdm(data: data)
+        } catch {
+            errorInfo = error.localizedDescription
+            errorShow = true
+        }
     }
     
     func openNavigationView(view: AnyView) {

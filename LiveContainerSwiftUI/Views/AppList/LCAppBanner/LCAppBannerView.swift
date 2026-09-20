@@ -10,6 +10,7 @@ final class LCAppBannerRootView: UIView {
     static let bannerHeight: CGFloat = 88
 
     let runControl = LCAppBannerRunControl()
+    let shortcutControl = UIButton(type: .system)
 
     private let visualBackgroundView = UIView()
     private let iconImageView = UIImageView()
@@ -90,9 +91,15 @@ final class LCAppBannerRootView: UIView {
         detailStack.isAccessibilityElement = true
 
         runControl.translatesAutoresizingMaskIntoConstraints = false
+        shortcutControl.translatesAutoresizingMaskIntoConstraints = false
+        shortcutControl.setImage(UIImage(systemName: "plus.app.fill"), for: .normal)
+        shortcutControl.accessibilityLabel = "lc.appBanner.addToHomeScreen".loc
+        shortcutControl.layer.cornerRadius = 16
+        shortcutControl.layer.cornerCurve = .continuous
         addSubview(visualBackgroundView)
         addSubview(iconImageView)
         addSubview(detailStack)
+        addSubview(shortcutControl)
         addSubview(runControl)
 
         NSLayoutConstraint.activate([
@@ -107,8 +114,13 @@ final class LCAppBannerRootView: UIView {
             iconImageView.heightAnchor.constraint(equalToConstant: 60),
 
             detailStack.leadingAnchor.constraint(equalTo: iconImageView.trailingAnchor, constant: 10),
-            detailStack.trailingAnchor.constraint(lessThanOrEqualTo: runControl.leadingAnchor, constant: -10),
+            detailStack.trailingAnchor.constraint(lessThanOrEqualTo: shortcutControl.leadingAnchor, constant: -8),
             detailStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            shortcutControl.trailingAnchor.constraint(equalTo: runControl.leadingAnchor, constant: -8),
+            shortcutControl.centerYAnchor.constraint(equalTo: centerYAnchor),
+            shortcutControl.widthAnchor.constraint(equalToConstant: 32),
+            shortcutControl.heightAnchor.constraint(equalToConstant: 32),
 
             runControl.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             runControl.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -165,6 +177,8 @@ final class LCAppBannerRootView: UIView {
             progress: model.signProgress,
             isEnabled: !model.isAppRunning
         )
+        shortcutControl.tintColor = accentColor
+        shortcutControl.backgroundColor = accentColor.withAlphaComponent(0.14)
 
         var accessibilityParts = [model.displayName, "\(model.version) - \(model.bundleIdentifier)"]
         if !model.uiRemark.isEmpty {

@@ -92,7 +92,10 @@ final class SignInOperation: BaseStandaloneOperation<StandaloneOperationContext,
             if !AuthManager.shared.hasStoredPassword &&
                !AuthManager.shared.hasStoredXcodeToken
             {
-                AuthManager.shared.signOut()
+                // AnderStore may be reauthenticating an expired portal session while a valid
+                // local certificate still signs and launches apps. A failed password must not
+                // destroy that working certificate.
+                AuthManager.shared.signOut(keepCertificate: self.signInHandler is XPCSignInHandler)
             }
             try? await self.finalizeAuthentication(result: .failure(error))
             throw error

@@ -1,6 +1,75 @@
 import CryptoKit
 import Foundation
 
+enum AnderPairingState: String, Codable {
+    case checking
+    case missing
+    case invalid
+    case valid
+}
+
+enum AnderVPNState: String, Codable {
+    case checking
+    case disconnected
+    case connected
+}
+
+enum AnderConnectionState: String, Codable {
+    case starting
+    case ready
+    case unreachable
+}
+
+struct AnderDeviceStatusValue: Equatable {
+    let pairing: AnderPairingState
+    let vpn: AnderVPNState
+    let connection: AnderConnectionState
+
+    var pairingReady: Bool { pairing == .valid }
+    var vpnReady: Bool { vpn == .connected }
+    var ready: Bool { pairingReady && vpnReady && connection == .ready }
+}
+
+enum AnderDeviceStatusLogic {
+    /// Maps independent file/VPN/connection signals without turning startup or network failures
+    /// into a false "invalid pairing file" warning.
+    static func evaluate(pairing: AnderPairingState,
+                         minimuxerFailure: String?) -> AnderDeviceStatusValue {
+        guard pairing == .valid else {
+            return AnderDeviceStatusValue(pairing: pairing,
+                                          vpn: .checking,
+                                          connection: .unreachable)
+        }
+
+        switch minimuxerFailure {
+        case nil:
+            return AnderDeviceStatusValue(pairing: .valid, vpn: .connected, connection: .ready)
+        case "invalidPairing":
+            return AnderDeviceStatusValue(pairing: .invalid, vpn: .connected, connection: .unreachable)
+        case "noVPN", "invalidVPN", "noConnection":
+            return AnderDeviceStatusValue(pairing: .valid, vpn: .disconnected, connection: .unreachable)
+        case "notStarted", "pairingNotLoaded":
+            return AnderDeviceStatusValue(pairing: .valid, vpn: .checking, connection: .starting)
+        default:
+            return AnderDeviceStatusValue(pairing: .valid, vpn: .checking, connection: .unreachable)
+        }
+    }
+}
+
+enum AnderHomeShortcutURL {
+    static func make(bundleName: String, containerFolderName: String? = nil) -> URL? {
+        var components = URLComponents()
+        components.scheme = "livecontainer"
+        components.host = "livecontainer-launch"
+        var items = [URLQueryItem(name: "bundle-name", value: bundleName)]
+        if let containerFolderName, !containerFolderName.isEmpty {
+            items.append(URLQueryItem(name: "container-folder-name", value: containerFolderName))
+        }
+        components.queryItems = items
+        return components.url
+    }
+}
+
 enum AnderVersioning {
     static func isNewer(version: String,
                         build: String?,

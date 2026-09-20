@@ -11,6 +11,7 @@
 import Foundation
 import CoreData
 import SideSign
+import MinimuxerCommon
 
 @objc(AnderCoreBridge)
 final class AnderCoreBridge: NSObject {
@@ -22,7 +23,7 @@ final class AnderCoreBridge: NSObject {
     private static let anderStoreCatalogBundleIdentifier = "com.kdt.livecontainer"
 
     /// Bumped together with AnderCoreService.protocolVersion when the envelope changes shape.
-    private static let protocolVersion = 3
+    private static let protocolVersion = 4
 
     private static let commands: [String] = [
         "handshake",
@@ -191,6 +192,7 @@ final class AnderCoreBridge: NSObject {
         Task {
             do {
                 try await AuthManager.shared.signIn(signInHandler: handler, anisetteServerHandler: handler)
+                AuthManager.shared.markPortalSessionReady()
                 activeSignIn = nil
                 completion(["appleID": appleID], nil)
             } catch {
@@ -203,7 +205,10 @@ final class AnderCoreBridge: NSObject {
     private static func accountStatus(completion: @escaping ([String: Any]) -> Void) {
         let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
         context.perform {
-            var result: [String: Any] = ["signedIn": AuthManager.shared.isAuthenticated]
+            var result: [String: Any] = [
+                "signedIn": AuthManager.shared.isAuthenticated,
+                "portalSessionState": AuthManager.shared.portalSessionState.rawValue
+            ]
             if let appleID = DatabaseManager.shared.activeAccount(in: context)?.appleID {
                 result["appleID"] = appleID
             }
@@ -223,7 +228,10 @@ final class AnderCoreBridge: NSObject {
             var result: [String: Any] = [:]
 
             if fields.contains("account") {
-                var account: [String: Any] = ["signedIn": AuthManager.shared.isAuthenticated]
+                var account: [String: Any] = [
+                    "signedIn": AuthManager.shared.isAuthenticated,
+                    "portalSessionState": AuthManager.shared.portalSessionState.rawValue
+                ]
                 if let appleID = DatabaseManager.shared.activeAccount(in: context)?.appleID {
                     account["appleID"] = appleID
                 }
@@ -386,11 +394,7 @@ final class AnderCoreBridge: NSObject {
             do {
                 remote = try await DeveloperPortalProxy.shared.fetchCertificates()
             } catch {
-                portalFailure = errorPayload(error)
-                if local.isEmpty {
-                    completion(nil, portalFailure)
-                    return
-                }
+                portalFailure = portalErrorPayload(error)
             }
 
             var payload = remote.map { certificate in
@@ -458,7 +462,7 @@ final class AnderCoreBridge: NSObject {
                 }
                 completion(["revoked": true], nil)
             } catch {
-                completion(nil, errorPayload(error))
+                completion(nil, portalErrorPayload(error))
             }
         }
     }
@@ -506,7 +510,7 @@ final class AnderCoreBridge: NSObject {
                 }
                 completion(["appIDs": payload], nil)
             } catch {
-                completion(nil, errorPayload(error))
+                completion(nil, portalErrorPayload(error))
             }
         }
     }
@@ -523,7 +527,7 @@ final class AnderCoreBridge: NSObject {
                 _ = try await DeveloperPortalProxy.shared.deleteAppID(appID)
                 completion(["deleted": true], nil)
             } catch {
-                completion(nil, errorPayload(error))
+                completion(nil, portalErrorPayload(error))
             }
         }
     }
@@ -543,26 +547,71 @@ final class AnderCoreBridge: NSObject {
                 }
                 completion(["profiles": payload], nil)
             } catch {
-                completion(nil, errorPayload(error))
+                completion(nil, portalErrorPayload(error))
             }
         }
     }
 
     private static func deviceStatus(completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
         Task {
-            let hasPairingFile = PairingFileManager.shared.fetchPairingFile() != nil
+            let pairingState: String
+            if let contents = PairingFileManager.shared.fetchPairingFile() {
+                do {
+                    _ = try PairingFileParser.parse(content: contents)
+                    pairingState = "valid"
+                } catch {
+                    pairingState = "invalid"
+                }
+            } else {
+                pairingState = "missing"
+            }
+
+            guard pairingState == "valid" else {
+                completion([
+                    "ready": false,
+                    "pairingState": pairingState,
+                    "vpnState": "checking",
+                    "connectionState": "unreachable",
+                    "pairingReady": false,
+                    "vpnReady": false
+                ], nil)
+                return
+            }
+
             let readiness = await isMinimuxerReady()
             switch readiness {
             case .success(let ready):
-                completion(["ready": ready, "vpnReady": ready, "pairingReady": hasPairingFile], nil)
+                completion([
+                    "ready": ready,
+                    "pairingState": "valid",
+                    "vpnState": ready ? "connected" : "checking",
+                    "connectionState": ready ? "ready" : "starting",
+                    "pairingReady": true,
+                    "vpnReady": ready
+                ], nil)
             case .failure(let error):
                 let operationError = error.asOperationError
                 let failure = errorPayload(operationError)
-                let kind = failure["kind"] as? String
+                let status: (pairing: String, vpn: String, connection: String)
+                switch error {
+                case .invalidPairing:
+                    status = ("invalid", "connected", "unreachable")
+                case .noVPN, .invalidVPN, .noConnection:
+                    status = ("valid", "disconnected", "unreachable")
+                case .notStarted, .pairingNotLoaded:
+                    status = ("valid", "checking", "starting")
+                case .noDevice, .notReachable:
+                    status = ("valid", "checking", "unreachable")
+                default:
+                    status = ("valid", "checking", "unreachable")
+                }
                 completion([
                     "ready": false,
-                    "vpnReady": kind != "noVPN",
-                    "pairingReady": hasPairingFile && kind != "needsPairing",
+                    "pairingState": status.pairing,
+                    "vpnState": status.vpn,
+                    "connectionState": status.connection,
+                    "vpnReady": status.vpn == "connected",
+                    "pairingReady": status.pairing == "valid",
                     "failure": failure
                 ], nil)
             }
@@ -640,5 +689,36 @@ final class AnderCoreBridge: NSObject {
             "domain": nsError.domain,
             "code": nsError.code
         ]
+    }
+
+    /// Portal commands use an existing token. If Apple rejects it, asking the user to re-enter
+    /// credentials is different from reporting that the password they just typed was wrong.
+    private static func portalErrorPayload(_ error: Error) -> [String: Any] {
+        var payload = errorPayload(error)
+        let nsError = error as NSError
+        let diagnostic = [
+            error.localizedDescription,
+            String(reflecting: error),
+            nsError.userInfo[NSUnderlyingErrorKey].map { String(describing: $0) } ?? ""
+        ].joined(separator: " ").lowercased()
+        if payload["kind"] as? String == "unknown",
+           diagnostic.contains("unauthorized") || diagnostic.contains("authentication") ||
+           diagnostic.contains("session") || diagnostic.contains("token") ||
+           diagnostic.contains("http 401") || diagnostic.contains("status code: 401") ||
+           diagnostic.contains("http 403") || diagnostic.contains("status code: 403") {
+            payload["kind"] = "sessionExpired"
+        }
+        switch payload["kind"] as? String {
+        case "needsAuth":
+            AuthManager.shared.expirePortalSession()
+            payload["kind"] = "sessionExpired"
+        case "sessionExpired":
+            AuthManager.shared.expirePortalSession()
+        case "rateLimited":
+            AuthManager.shared.expirePortalSession(rateLimited: true)
+        default:
+            break
+        }
+        return payload
     }
 }

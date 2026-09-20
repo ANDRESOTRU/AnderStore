@@ -516,7 +516,7 @@ struct UserCustomizationsView: View {
     private func exportWireGuardConfig() {
         guard let top = UIApplication.shared.topViewController() else { return }
         guard let url = Bundle.main.url(forResource: "SideStore", withExtension: "conf") else {
-            let toastView = ToastView(text: NSLocalizedString("AnderStore.conf missing!", comment: ""), detailText: "Unable to locate SideStore.conf in bundle resources.")
+            let toastView = ToastView(text: NSLocalizedString("Configuration file missing!", comment: ""), detailText: "Unable to locate the required configuration file in bundle resources.")
             toastView.show(in: top)
             return
         }

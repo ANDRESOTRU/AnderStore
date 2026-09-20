@@ -632,8 +632,6 @@ enum AnderAccountAPI {
     /// technical message never does.
     static func friendly(_ failure: AnderCoreFailure) -> String {
         switch failure.kind {
-        case "rateLimited":
-            return "lc.account.errorTooMany".loc
         case "cancelled":
             return "lc.account.errorCancelled".loc
         case "certificateRevoked":
@@ -648,9 +646,13 @@ enum AnderAccountAPI {
             return "lc.update.notFound".loc
         case "needsAuth":
             return "lc.account.errorPassword".loc
+        case "sessionExpired":
+            return "lc.account.sessionExpired".loc
+        case "rateLimited":
+            return "lc.account.errorRateLimited".loc
         case "noVPN", "needsMinimuxer", "noConnection", "needsPairing", "noDevice", "timedOut":
             return "lc.account.errorVPN".loc
-        case "coreUnavailable", "noBundle", "notConnected", "terminated", "startTimeout", "unsupportedCommand":
+        case "coreUnavailable", "noBundle", "notConnected", "terminated", "startTimeout", "unsupportedCommand", "unsupportedProtocol":
             return "lc.account.errorNoExtension".loc
         default:
             return friendly(failure.message)
@@ -714,7 +716,7 @@ struct AnderAccountView: View {
     @State private var showSignInForm = false
     @State private var showSetupInstructions = false
 
-    private var signedIn: Bool { state.account.signedIn || !savedAppleID.isEmpty }
+    private var signedIn: Bool { state.account.signedIn }
     private var allDone: Bool { state.readiness == .ready }
     private var busy: Bool {
         if case .idle = phase { return false }
@@ -795,7 +797,10 @@ struct AnderAccountView: View {
             case .invalidCertificate:
                 return ("xmark.seal", .red, "lc.readiness.invalidCertificate".loc, false)
             case .needsPairing:
-                return ("iphone.and.arrow.forward", .orange, "lc.readiness.needsPairing".loc, true)
+                let key = state.pairingState == .missing
+                    ? "lc.readiness.pairingMissing"
+                    : "lc.readiness.pairingInvalid"
+                return ("iphone.and.arrow.forward", .orange, key.loc, true)
             case .needsVPN:
                 return ("shield.slash", .orange, "lc.readiness.needsVPN".loc, true)
             case .needsJITLess:
@@ -826,16 +831,6 @@ struct AnderAccountView: View {
             message = "lc.account.errorNoExtension".loc
             return
         }
-        guard state.pairingReady else {
-            message = "lc.update.needsPairing".loc
-            showSetupInstructions = true
-            return
-        }
-        guard state.vpnReady else {
-            message = "lc.update.needsVPN".loc
-            showSetupInstructions = true
-            return
-        }
         message = nil
         phase = .updating(0)
         let started = AnderAccountAPI.updateSelf(version: latestVersion, progress: { value in
@@ -847,6 +842,7 @@ struct AnderAccountView: View {
             } else if updated == false {
                 message = "lc.update.notInstalled".loc
             } else {
+                state.markDeviceConnectionReady()
                 message = "lc.update.installed".loc
                 latestNotes = ""
             }
@@ -923,9 +919,9 @@ struct AnderAccountView: View {
                         .background(AnderTheme.accent)
                         .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
                 }
-                .disabled(busy || !signedIn)
-                if !signedIn {
-                    Text("lc.update.needSignIn".loc).font(.caption).foregroundStyle(.secondary)
+                .disabled(busy || !state.certificateValid)
+                if !state.certificateValid {
+                    Text("lc.readiness.needsCertificate".loc).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
@@ -941,6 +937,7 @@ struct AnderAccountView: View {
         }
         // Paints from the cached snapshot; only goes to Core when that snapshot is old.
         state.handleForeground()
+        if email.isEmpty { email = savedAppleID }
         // The foreground coordinator may start Core for a local, network-free certificate sync.
     }
 
@@ -1003,34 +1000,18 @@ struct AnderAccountView: View {
             return
         }
         message = nil
-        phase = .refreshing(0)
-        let started = AnderAccountAPI.refresh(progress: { value in
-            phase = .refreshing(value)
-        }, completion: { failure in
-            phase = .idle
-            if let failure {
-                message = AnderAccountAPI.friendly(failure)
-            } else {
-                expiration = AnderSignature.expirationDate()
-                state.synchronizeCertificate(force: true) { syncState in
-                    switch syncState {
-                    case .updated:
-                        message = "lc.certificateSync.updated".loc
-                    case .current:
-                        message = "lc.certificateSync.current".loc
-                    case .missing:
-                        message = "lc.certificateSync.notFound".loc
-                    case .failed(let detail):
-                        message = detail
-                    case .idle, .syncing:
-                        break
-                    }
-                }
+        state.renewSignatures(manual: true) { result in
+            expiration = state.signatureExpiration ?? AnderSignature.expirationDate()
+            switch result {
+            case .failed(let detail):
+                message = detail
+            case .needsVPN:
+                message = "lc.readiness.needsVPN".loc
+            case .complete:
+                message = nil
+            case .idle, .refreshing:
+                break
             }
-        })
-        if !started {
-            phase = .idle
-            message = "lc.account.errorNoExtension".loc
         }
     }
 
@@ -1080,16 +1061,10 @@ struct AnderAccountView: View {
             Text("lc.account.refreshHint".loc)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            certificateSyncStatus
-            if case .refreshing(let value) = phase {
-                VStack(alignment: .leading, spacing: 6) {
-                    ProgressView(value: value)
-                        .tint(AnderTheme.accent)
-                    Text("lc.account.refreshing".loc)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+            if case .refreshing = state.renewalState {
+                EmptyView()
             } else {
+                certificateSyncStatus
                 Button(action: refresh) {
                     Label("lc.account.refreshNow".loc, systemImage: "arrow.clockwise")
                         .font(.body.weight(.medium))

@@ -7,7 +7,7 @@ on:
         description: Publish a stable versioned release
         type: boolean
         required: false
-        default: true
+        default: false
 
 jobs:
   build:

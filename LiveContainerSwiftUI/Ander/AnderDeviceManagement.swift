@@ -39,6 +39,8 @@ final class AnderDeviceManagementModel: ObservableObject {
     @Published private(set) var profiles: [AnderProfileInfo] = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
+    @Published private(set) var portalSessionState: AnderPortalSessionState = .unknown
+    @Published var showingReauthentication = false
 
     private init() {}
 
@@ -58,7 +60,9 @@ final class AnderDeviceManagementModel: ObservableObject {
                                             isPortal: row["isPortal"] as? Bool ?? false)
             }
             if let failure = payload?["portalFailure"] as? [String: Any] {
-                self?.errorMessage = AnderAccountAPI.friendly(AnderCoreFailure(payload: failure))
+                self?.handlePortalFailure(AnderCoreFailure(payload: failure))
+            } else {
+                self?.portalSessionState = .ready
             }
         }
     }
@@ -142,6 +146,31 @@ final class AnderDeviceManagementModel: ObservableObject {
         }
     }
 
+    func requestReauthentication() {
+        showingReauthentication = true
+    }
+
+    func didReauthenticate() {
+        portalSessionState = .ready
+        showingReauthentication = false
+        AnderState.shared.invalidate()
+    }
+
+    private func handlePortalFailure(_ failure: AnderCoreFailure) {
+        switch failure.kind {
+        case "sessionExpired", "needsAuth":
+            portalSessionState = .reauthRequired
+            AnderState.shared.invalidate()
+        case "rateLimited":
+            portalSessionState = .rateLimited
+            UserDefaults.standard.set(Date().timeIntervalSince1970 + 30 * 60,
+                                      forKey: "anderSignInBlockedUntil")
+            AnderState.shared.invalidate()
+        default:
+            errorMessage = AnderAccountAPI.friendly(failure)
+        }
+    }
+
     private func run(_ command: String,
                      params: [String: Any] = [:],
                      completion: @escaping ([String: Any]?) -> Void) {
@@ -151,9 +180,10 @@ final class AnderDeviceManagementModel: ObservableObject {
         let started = AnderAccountAPI.perform(command, params: params) { [weak self] response, failure in
             self?.isLoading = false
             if let failure {
-                self?.errorMessage = AnderAccountAPI.friendly(failure)
+                self?.handlePortalFailure(failure)
                 return
             }
+            self?.portalSessionState = .ready
             completion(response)
         }
         if !started {
@@ -176,6 +206,130 @@ struct AnderBinaryDocument: FileDocument {
     }
 }
 
+private struct AnderPortalSessionBanner: View {
+    @ObservedObject var model: AnderDeviceManagementModel
+
+    var body: some View {
+        if model.portalSessionState == .reauthRequired || model.portalSessionState == .rateLimited {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(model.portalSessionState == .rateLimited
+                          ? "lc.account.errorRateLimited".loc
+                          : "lc.account.sessionExpired".loc,
+                          systemImage: "person.crop.circle.badge.exclamationmark")
+                        .foregroundStyle(.orange)
+                    Button("lc.account.signInAgain".loc) {
+                        model.requestReauthentication()
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+}
+
+private struct AnderReauthenticationView: View {
+    private enum Phase: Equatable {
+        case idle
+        case signingIn
+        case needsCode(String)
+    }
+
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("anderAppleID") private var savedAppleID = ""
+    @AppStorage("anderSignInBlockedUntil") private var signInBlockedUntil = 0.0
+    @State private var email = ""
+    @State private var password = ""
+    @State private var code = ""
+    @State private var message: String?
+    @State private var phase: Phase = .idle
+    let onSuccess: () -> Void
+
+    private var blocked: Bool { signInBlockedUntil > Date().timeIntervalSince1970 }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("lc.account.emailPlaceholder".loc, text: $email)
+                        .textContentType(.username)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("lc.account.passwordPlaceholder".loc, text: $password)
+                        .textContentType(.password)
+                    Button("lc.account.signInButton".loc, action: signIn)
+                        .disabled(phase != .idle || email.isEmpty || password.isEmpty || blocked)
+                } footer: {
+                    if blocked {
+                        Text("lc.account.errorRateLimited".loc).foregroundStyle(.orange)
+                    } else {
+                        Text("lc.account.privacy".loc)
+                    }
+                }
+
+                if case .needsCode(let prompt) = phase {
+                    Section("lc.account.codeTitle".loc) {
+                        Text(prompt == "trustedDevice" || prompt == "sms"
+                             ? "lc.account.codeDesc".loc : prompt)
+                        TextField("000000", text: $code)
+                            .keyboardType(.numberPad)
+                            .textContentType(.oneTimeCode)
+                        Button("lc.account.codeConfirm".loc) {
+                            phase = .signingIn
+                            AnderAccountAPI.submitCode(code.trimmingCharacters(in: .whitespacesAndNewlines))
+                        }
+                        .disabled(code.count < 6)
+                    }
+                }
+
+                if let message {
+                    Section { Text(message).foregroundStyle(.red) }
+                }
+            }
+            .navigationTitle("lc.account.signInAgain".loc)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("lc.common.cancel".loc) {
+                        if case .needsCode = phase { AnderAccountAPI.submitCode("") }
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear { email = savedAppleID }
+        }
+    }
+
+    private func signIn() {
+        let appleID = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !appleID.isEmpty, !password.isEmpty, !blocked else { return }
+        message = nil
+        phase = .signingIn
+        let started = AnderAccountAPI.signIn(appleID: appleID, password: password, onCode: { prompt in
+            code = ""
+            phase = .needsCode(prompt)
+        }, completion: { failure, account in
+            password = ""
+            phase = .idle
+            if let failure {
+                if failure.kind == "rateLimited" {
+                    signInBlockedUntil = Date().timeIntervalSince1970 + 30 * 60
+                }
+                message = AnderAccountAPI.friendly(failure)
+                return
+            }
+            signInBlockedUntil = 0
+            savedAppleID = account ?? appleID
+            onSuccess()
+            dismiss()
+        })
+        if !started {
+            phase = .idle
+            message = "lc.account.errorNoExtension".loc
+        }
+    }
+}
+
 struct AnderCertificatesView: View {
     @ObservedObject private var model = AnderDeviceManagementModel.shared
     @State private var revokeTarget: AnderCertificateInfo?
@@ -190,6 +344,7 @@ struct AnderCertificatesView: View {
 
     var body: some View {
         List {
+            AnderPortalSessionBanner(model: model)
             Section {
                 Button("lc.certificates.import".loc) { importing = true }
             }
@@ -235,6 +390,12 @@ struct AnderCertificatesView: View {
         .overlay { if model.isLoading { ProgressView() } }
         .refreshable { model.loadCertificates() }
         .onAppear { model.loadCertificates() }
+        .sheet(isPresented: $model.showingReauthentication) {
+            AnderReauthenticationView {
+                model.didReauthenticate()
+                model.loadCertificates()
+            }
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.data]) { result in
             guard case .success(let url) = result else { return }
             let scoped = url.startAccessingSecurityScopedResource()
@@ -297,23 +458,32 @@ struct AnderAppIDsView: View {
     @State private var deleteTarget: AnderAppIDInfo?
 
     var body: some View {
-        List(model.appIDs) { appID in
-            VStack(alignment: .leading, spacing: 4) {
-                Text(appID.name).font(.headline)
-                Text(appID.bundleIdentifier).font(.caption).foregroundStyle(.secondary)
-                Text(appID.identifier).font(.caption2).foregroundStyle(.secondary)
-                if let date = appID.expirationDate {
-                    Text(date.formatted(date: .abbreviated, time: .omitted)).font(.caption2)
+        List {
+            AnderPortalSessionBanner(model: model)
+            ForEach(model.appIDs) { appID in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appID.name).font(.headline)
+                    Text(appID.bundleIdentifier).font(.caption).foregroundStyle(.secondary)
+                    Text(appID.identifier).font(.caption2).foregroundStyle(.secondary)
+                    if let date = appID.expirationDate {
+                        Text(date.formatted(date: .abbreviated, time: .omitted)).font(.caption2)
+                    }
                 }
-            }
-            .swipeActions {
-                Button(role: .destructive) { deleteTarget = appID } label: { Label("lc.common.remove".loc, systemImage: "trash") }
+                .swipeActions {
+                    Button(role: .destructive) { deleteTarget = appID } label: { Label("lc.common.remove".loc, systemImage: "trash") }
+                }
             }
         }
         .navigationTitle("lc.device.appIDs".loc)
         .overlay { if model.isLoading { ProgressView() } }
         .onAppear { model.loadAppIDs() }
         .refreshable { model.loadAppIDs() }
+        .sheet(isPresented: $model.showingReauthentication) {
+            AnderReauthenticationView {
+                model.didReauthenticate()
+                model.loadAppIDs()
+            }
+        }
         .alert("lc.appIDs.deleteTitle".loc,
                isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })) {
             Button("lc.common.remove".loc, role: .destructive) {
@@ -332,17 +502,26 @@ struct AnderAppIDsView: View {
 struct AnderProfilesView: View {
     @ObservedObject private var model = AnderDeviceManagementModel.shared
     var body: some View {
-        List(model.profiles) { profile in
-            VStack(alignment: .leading, spacing: 4) {
-                Text(profile.name).font(.headline)
-                Text(profile.bundleIdentifier ?? profile.identifier ?? profile.uuid)
-                    .font(.caption).foregroundStyle(.secondary)
+        List {
+            AnderPortalSessionBanner(model: model)
+            ForEach(model.profiles) { profile in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(profile.name).font(.headline)
+                    Text(profile.bundleIdentifier ?? profile.identifier ?? profile.uuid)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle("lc.device.profiles".loc)
         .overlay { if model.isLoading { ProgressView() } }
         .onAppear { model.loadProfiles() }
         .refreshable { model.loadProfiles() }
+        .sheet(isPresented: $model.showingReauthentication) {
+            AnderReauthenticationView {
+                model.didReauthenticate()
+                model.loadProfiles()
+            }
+        }
         .alert("lc.common.error".loc,
                isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("lc.common.ok".loc) { model.errorMessage = nil }
