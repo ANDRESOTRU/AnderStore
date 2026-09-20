@@ -30,6 +30,25 @@ struct AnderCoreApp: Equatable, Identifiable {
     var id: String { bundleIdentifier }
 }
 
+enum AnderReadiness: Equatable {
+    case checking
+    case needsAccount
+    case needsCertificate
+    case invalidCertificate
+    case needsPairing
+    case needsVPN
+    case needsJITLess
+    case ready
+}
+
+enum AnderRenewalState: Equatable {
+    case idle
+    case refreshing(Double)
+    case needsVPN
+    case failed(String)
+    case complete
+}
+
 /// Used from the interface only, like SharedModel: every method runs on the main thread.
 final class AnderState: ObservableObject {
 
@@ -44,6 +63,13 @@ final class AnderState: ObservableObject {
     @Published private(set) var coreApps: [AnderCoreApp] = []
     @Published private(set) var capturedAt: Date?
     @Published private(set) var isRefreshing = false
+    @Published private(set) var readiness: AnderReadiness = .checking
+    @Published private(set) var vpnReady = false
+    @Published private(set) var pairingReady = false
+    @Published private(set) var jitLessReady = false
+    @Published private(set) var certificateValid = false
+    @Published private(set) var renewalState: AnderRenewalState = .idle
+    @Published private(set) var resignSummary: String?
 
     /// Expiration of AnderStore's own signature, read from the provisioning profile.
     @Published var signatureExpiration: Date?
@@ -73,6 +99,8 @@ final class AnderState: ObservableObject {
             guard let response else { return }
             self.apply(response)
             self.saveCache(response)
+            self.refreshDeviceStatus()
+            self.validateLocalSetup()
         }
         if !started {
             isRefreshing = false
@@ -84,6 +112,125 @@ final class AnderState: ObservableObject {
         capturedAt = nil
         signatureExpiration = AnderSignature.expirationDate()
         refresh(force: true)
+    }
+
+    func clearAccountAfterSignOut() {
+        account = AnderAccountInfo()
+        capturedAt = nil
+        evaluateReadiness()
+        LCUtils.appGroupUserDefault.removeObject(forKey: Self.cacheKey)
+    }
+
+    func certificateDidChange() {
+        certificatePresent = LCSharedUtils.certificatePassword() != nil
+        validateLocalSetup(resignAfterSuccess: true)
+        invalidate()
+    }
+
+    func refreshDeviceStatus() {
+        guard coreAvailable else { return }
+        _ = AnderAccountAPI.perform("device.status") { [weak self] response, _ in
+            guard let self, let response else { return }
+            self.vpnReady = response["vpnReady"] as? Bool ?? false
+            self.pairingReady = response["pairingReady"] as? Bool ?? false
+            self.evaluateReadiness()
+        }
+    }
+
+    func validateLocalSetup(resignAfterSuccess: Bool = false) {
+        guard LCUtils.certificateData() != nil else {
+            certificateValid = false
+            jitLessReady = false
+            evaluateReadiness()
+            return
+        }
+        readiness = .checking
+        LCUtils.validateCertificate { [weak self] status, _, _, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.certificateValid = status == 0
+                guard self.certificateValid else {
+                    self.jitLessReady = false
+                    self.evaluateReadiness()
+                    return
+                }
+                LCUtils.validateJITLessSetup { success, _ in
+                    DispatchQueue.main.async {
+                        self.jitLessReady = success
+                        self.evaluateReadiness()
+                        if success && resignAfterSuccess {
+                            Task { await self.resignAllLiveApps() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func autoRenewIfNeeded(force: Bool = false) {
+        let defaults = LCUtils.appGroupUserDefault
+        let lastAttempt = defaults.double(forKey: "anderLastAutoRefresh")
+        guard coreAvailable,
+              account.signedIn,
+              let expiration = signatureExpiration,
+              AnderSignature.daysLeft(until: expiration) <= 3,
+              force || Date().timeIntervalSince1970 - lastAttempt > 6 * 3600 else { return }
+
+        defaults.set(Date().timeIntervalSince1970, forKey: "anderLastAutoRefresh")
+        renewalState = .refreshing(0)
+        let started = AnderAccountAPI.refresh(progress: { [weak self] value in
+            self?.renewalState = .refreshing(value)
+        }, completion: { [weak self] failure in
+            guard let self else { return }
+            if let failure {
+                self.renewalState = failure.kind == "noVPN" || failure.kind == "needsMinimuxer"
+                    ? .needsVPN : .failed(AnderAccountAPI.friendly(failure))
+                return
+            }
+            _ = AnderAccountAPI.importCertificateFromCore()
+            self.signatureExpiration = AnderSignature.expirationDate()
+            self.renewalState = .complete
+            self.invalidate()
+        })
+        if !started {
+            renewalState = .failed("lc.account.errorNoExtension".loc)
+        }
+    }
+
+    @MainActor
+    private func resignAllLiveApps() async {
+        let model = DataManager.shared.model
+        // Do not reveal hidden app names in the result until the user has authenticated.
+        let apps = model.apps + (model.isHiddenAppUnlocked ? model.hiddenApps : [])
+        var skipped: [String] = []
+        var failed: [String] = []
+        var resigned = 0
+        for app in apps {
+            if app.isAppRunning {
+                skipped.append(app.displayName)
+                continue
+            }
+            do {
+                try await app.forceResign()
+                resigned += 1
+            } catch {
+                failed.append(app.displayName)
+            }
+        }
+        var parts = [String(format: "lc.readiness.resignComplete".loc, resigned)]
+        if !skipped.isEmpty { parts.append(String(format: "lc.readiness.resignSkipped".loc, skipped.joined(separator: ", "))) }
+        if !failed.isEmpty { parts.append(String(format: "lc.readiness.resignFailed".loc, failed.joined(separator: ", "))) }
+        resignSummary = parts.joined(separator: "\n")
+    }
+
+    private func evaluateReadiness() {
+        if !account.signedIn { readiness = .needsAccount }
+        else if !certificatePresent && LCSharedUtils.certificatePassword() == nil { readiness = .needsCertificate }
+        else if !certificateValid { readiness = .invalidCertificate }
+        else if !pairingReady { readiness = .needsPairing }
+        else if !vpnReady { readiness = .needsVPN }
+        else if !jitLessReady { readiness = .needsJITLess }
+        else { readiness = .ready }
     }
 
     // MARK: - Snapshot
@@ -122,7 +269,29 @@ final class AnderState: ObservableObject {
     }
 
     private func saveCache(_ snapshot: [String: Any]) {
-        // Only plain values travel here: never the certificate itself, never a password.
-        LCUtils.appGroupUserDefault.set(snapshot, forKey: Self.cacheKey)
+        // Persist only the summary fields used to paint the UI. Never persist certificate
+        // serials, passwords, private keys or imported .p12 contents in this cache.
+        var safe: [String: Any] = ["capturedAt": snapshot["capturedAt"] as? Date ?? Date()]
+        if let account = snapshot["account"] as? [String: Any] {
+            safe["account"] = [
+                "signedIn": account["signedIn"] as? Bool ?? false,
+                "teamType": account["teamType"] as? Int ?? 0
+            ]
+        }
+        if let certificate = snapshot["certificate"] as? [String: Any] {
+            safe["certificate"] = ["present": certificate["present"] as? Bool ?? false]
+        }
+        if let apps = snapshot["apps"] as? [[String: Any]] {
+            safe["apps"] = apps.map { app in
+                [
+                    "bundleIdentifier": app["bundleIdentifier"] as? String ?? "",
+                    "name": app["name"] as? String ?? "",
+                    "version": app["version"] as? String ?? "",
+                    "expirationDate": app["expirationDate"] as? Date ?? Date.distantPast,
+                    "hasUpdate": app["hasUpdate"] as? Bool ?? false
+                ]
+            }
+        }
+        LCUtils.appGroupUserDefault.set(safe, forKey: Self.cacheKey)
     }
 }

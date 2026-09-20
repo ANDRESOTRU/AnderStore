@@ -9,6 +9,44 @@ import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct AnderUpdateRow: View {
+    let candidate: AnderUpdateCandidate
+    let action: () -> Void
+    @ObservedObject private var installer = AnderInstaller.shared
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let iconURL = candidate.storeApp.iconURL {
+                AsyncImage(url: iconURL) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Image("DefaultIcon").resizable().scaledToFill()
+                }
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 11))
+            } else {
+                Image("DefaultIcon")
+                    .resizable()
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 11))
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(candidate.storeApp.name).bold()
+                Text("\(candidate.installedApp.version) → \(candidate.version.version)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("lc.sources.update".loc, action: action)
+                .buttonStyle(.borderedProminent)
+                .disabled(installer.isBusy)
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 18)
+            .fill(Color(uiColor: .secondarySystemBackground)))
+    }
+}
+
 class SearchContext: ObservableObject {
     @Published var query: String = ""
     @Published var debouncedQuery: String = ""
@@ -45,6 +83,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     
     // ipa installing stuff
     @ObservedObject var installer = AnderInstaller.shared
+    @ObservedObject private var catalog = AnderCatalogStore.shared
     
     @State var installOptions: [AppReplaceOption]
     @StateObject var installReplaceAlert = AlertHelper<AppReplaceOption>()
@@ -80,6 +119,8 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     @AppStorage("darkModeIcon", store: LCUtils.appGroupUserDefault) private var darkModeIcon = false
     
     @State private var isViewAppeared = false
+    @State private var updateSummary: String?
+    @State private var isUpdatingAll = false
     
     @ObservedObject var searchContext: SearchContext = SearchContext()
     var sortedApps: [LCAppModel] {
@@ -113,6 +154,14 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             }
         }
     }
+
+    private var updateCandidates: [AnderUpdateCandidate] {
+        var visibleApps = sharedModel.apps
+        if sharedModel.isHiddenAppUnlocked {
+            visibleApps += sharedModel.hiddenApps
+        }
+        return AnderCatalog.updateCandidates(from: catalog.sources, apps: visibleApps)
+    }
     
     init() {
         _installOptions = State(initialValue: [])
@@ -130,6 +179,29 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 .hidden()
                 
                 LazyVStack {
+                    if searchContext.debouncedQuery.isEmpty && !updateCandidates.isEmpty {
+                        HStack {
+                            Text("lc.updates.title".loc)
+                                .font(.system(.title2).bold())
+                            Spacer()
+                            Button("lc.updates.updateAll".loc) {
+                                Task { await updateAllApps() }
+                            }
+                            .disabled(installer.isBusy || isUpdatingAll)
+                        }
+                        ForEach(updateCandidates) { candidate in
+                            AnderUpdateRow(candidate: candidate) {
+                                Task { await update(candidate) }
+                            }
+                        }
+                        Divider().padding(.vertical, 4)
+                    }
+
+                    HStack {
+                        Text("lc.updates.liveApps".loc)
+                            .font(.system(.title2).bold())
+                        Spacer()
+                    }
                     ForEach(filteredApps, id: \.self) { app in
                         LCAppBanner(appModel: app, delegate: self)
                     }
@@ -290,8 +362,15 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         } message: {
             Text(errorInfo)
         }
+        .alert("lc.updates.summaryTitle".loc,
+               isPresented: Binding(get: { updateSummary != nil },
+                                    set: { if !$0 { updateSummary = nil } })) {
+            Button("lc.common.ok".loc) { updateSummary = nil }
+        } message: {
+            Text(updateSummary ?? "")
+        }
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { fileUrls in
-            Task { await installer.installLocalFile(fileUrls[0]) }
+            Task { await installer.install(.fileURL(fileUrls[0])) }
         }, onDismiss: {
             choosingIPA = false
         })
@@ -423,11 +502,33 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.InstallAppNotification)) { obj in
             if let obj2 = obj.object as? [String: Any], let installUrl = obj2["url"] as? URL {
-                Task { await installer.install(urlString: installUrl.absoluteString) }
+                Task { await installer.install(.remoteURL(installUrl)) }
             }
         }
         .searchable(text: $searchContext.query)
 
+    }
+
+    @MainActor
+    private func update(_ candidate: AnderUpdateCandidate) async -> Bool {
+        await installer.install(.storeApp(app: candidate.storeApp, sourceURL: candidate.sourceURL),
+                                mode: .replace(candidate.installedApp))
+    }
+
+    @MainActor
+    private func updateAllApps() async {
+        guard !isUpdatingAll else { return }
+        isUpdatingAll = true
+        let pending = updateCandidates
+        let results = await installer.installSequentially(pending)
+        let succeeded = results.filter { $0.succeeded }.count
+        let failures = results.filter { !$0.succeeded }.map { $0.candidate.storeApp.name }
+        isUpdatingAll = false
+        var summary = String(format: "lc.updates.summary".loc, succeeded, failures.count)
+        if !failures.isEmpty {
+            summary += "\n" + String(format: "lc.updates.failed".loc, failures.joined(separator: ", "))
+        }
+        updateSummary = summary
     }
     
     var JITEnablingModal : some View {

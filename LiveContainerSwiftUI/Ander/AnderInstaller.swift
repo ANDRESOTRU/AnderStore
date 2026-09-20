@@ -10,6 +10,7 @@
 
 import Foundation
 import SwiftUI
+import UIKit
 
 /// Where an app came from. Written next to the app so updates can be offered later.
 struct AnderProvenance {
@@ -17,6 +18,24 @@ struct AnderProvenance {
     let storeBundleId: String
     let version: String?
     let buildVersion: String?
+    let expectedSHA256: String?
+    let minimumOSVersion: String?
+}
+
+enum InstallSource {
+    case storeApp(app: AltStoreSourceApp, sourceURL: URL)
+    case fileURL(URL)
+    case remoteURL(URL)
+}
+
+enum InstallMode {
+    case newInstall
+    case replace(LCAppModel)
+
+    var replacement: LCAppModel? {
+        if case .replace(let app) = self { return app }
+        return nil
+    }
 }
 
 final class AnderInstaller: ObservableObject {
@@ -28,6 +47,8 @@ final class AnderInstaller: ObservableObject {
     @Published var progressValue: Float = 0.0
     /// Catalog identifier of the app being installed, so its row in the store can show progress.
     @Published private(set) var activeStoreBundleId: String?
+    /// Store identifiers still waiting in a sequential batch operation.
+    @Published private(set) var queuedStoreBundleIDs: [String] = []
     @Published var errorMessage: String?
 
     var isBusy: Bool { progressVisible }
@@ -45,32 +66,83 @@ final class AnderInstaller: ObservableObject {
     // MARK: - Entry points
 
     @MainActor
-    func install(urlString: String, provenance: AnderProvenance? = nil) async {
-        if urlString.lowercased().hasPrefix("itms-services://") {
-            await installFromPlist(urlString: urlString, provenance: provenance)
-            return
+    @discardableResult
+    func install(_ source: InstallSource, mode: InstallMode = .newInstall) async -> Bool {
+        switch source {
+        case .storeApp(let app, let sourceURL):
+            guard let version = app.latestVersion else {
+                report("lc.sources.error.missingDownload".loc)
+                return false
+            }
+            if sourceURL.host?.lowercased() == "store.andresot.uk",
+               (version.sha256?.isEmpty ?? true) {
+                report("lc.appList.invalidChecksum".loc)
+                return false
+            }
+            let provenance = AnderProvenance(sourceURL: sourceURL.absoluteString,
+                                             storeBundleId: app.bundleIdentifier,
+                                             version: version.version,
+                                             buildVersion: version.buildVersion,
+                                             expectedSHA256: version.sha256,
+                                             minimumOSVersion: version.minimumOSVersion)
+            if let minimum = version.minimumOSVersion,
+               AnderPackageCheck.isVersion(minimum, newerThan: UIDevice.current.systemVersion) {
+                report(String(format: "lc.appList.needsNewerIOS".loc, minimum))
+                return false
+            }
+            return await install(urlString: version.downloadURL.absoluteString,
+                                 provenance: provenance,
+                                 preferredReplacement: mode.replacement)
+        case .fileURL(let url):
+            return await install(urlString: url.absoluteString)
+        case .remoteURL(let url):
+            return await install(urlString: url.absoluteString)
         }
-        await installFromUrl(urlString: urlString, provenance: provenance)
     }
 
+    /// The signer is deliberately serialized. A failure is recorded for that app and the
+    /// remaining updates continue; the caller decides how to present the final summary.
     @MainActor
-    func installLocalFile(_ fileUrl: URL, provenance: AnderProvenance? = nil) async {
-        progressVisible = true
-        do {
-            try await installIpaFile(fileUrl, provenance: provenance)
-            try FileManager.default.removeItem(at: fileUrl)
-        } catch {
-            report(error.localizedDescription)
-            progressVisible = false
+    func installSequentially(_ candidates: [AnderUpdateCandidate]) async
+        -> [(candidate: AnderUpdateCandidate, succeeded: Bool)] {
+        queuedStoreBundleIDs = candidates.map { $0.storeApp.bundleIdentifier }
+        defer { queuedStoreBundleIDs = [] }
+        var results: [(candidate: AnderUpdateCandidate, succeeded: Bool)] = []
+        for candidate in candidates {
+            queuedStoreBundleIDs.removeAll { $0 == candidate.storeApp.bundleIdentifier }
+            let succeeded = await install(
+                .storeApp(app: candidate.storeApp, sourceURL: candidate.sourceURL),
+                mode: .replace(candidate.installedApp)
+            )
+            results.append((candidate, succeeded))
+            if !succeeded { errorMessage = nil }
         }
+        return results
+    }
+
+    @discardableResult
+    func install(urlString: String,
+                 provenance: AnderProvenance? = nil,
+                 preferredReplacement: LCAppModel? = nil) async -> Bool {
+        errorMessage = nil
+        if urlString.lowercased().hasPrefix("itms-services://") {
+            return await installFromPlist(urlString: urlString,
+                                          provenance: provenance,
+                                          preferredReplacement: preferredReplacement)
+        }
+        return await installFromUrl(urlString: urlString,
+                                    provenance: provenance,
+                                    preferredReplacement: preferredReplacement)
     }
 
     // MARK: - Sources
 
     @MainActor
-    private func installFromPlist(urlString: String, provenance: AnderProvenance?) async {
-        if progressVisible { return }
-        guard checkPrimaryInstance() else { return }
+    private func installFromPlist(urlString: String,
+                                  provenance: AnderProvenance?,
+                                  preferredReplacement: LCAppModel?) async -> Bool {
+        if progressVisible { return false }
+        guard checkPrimaryInstance() else { return false }
 
         var plistUrlStr = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -81,13 +153,13 @@ final class AnderInstaller: ObservableObject {
                 plistUrlStr = urlParam
             } else {
                 report("lc.appList.plistInvalidError".loc)
-                return
+                return false
             }
         }
 
         guard let plistUrl = URL(string: plistUrlStr) else {
             report("lc.appList.urlInvalidError".loc)
-            return
+            return false
         }
 
         do {
@@ -97,7 +169,7 @@ final class AnderInstaller: ObservableObject {
                   let firstItem = items.first,
                   let assets = firstItem["assets"] as? [[String: Any]] else {
                 report("lc.appList.plistParseError".loc)
-                return
+                return false
             }
 
             var ipaUrlStr: String?
@@ -111,26 +183,31 @@ final class AnderInstaller: ObservableObject {
 
             guard let ipaUrlStr else {
                 report("lc.appList.plistNoIpaError".loc)
-                return
+                return false
             }
-            await installFromUrl(urlString: ipaUrlStr, provenance: provenance)
+            return await installFromUrl(urlString: ipaUrlStr,
+                                        provenance: provenance,
+                                        preferredReplacement: preferredReplacement)
         } catch {
             report(error.localizedDescription)
+            return false
         }
     }
 
     @MainActor
-    private func installFromUrl(urlString: String, provenance: AnderProvenance?) async {
+    private func installFromUrl(urlString: String,
+                                provenance: AnderProvenance?,
+                                preferredReplacement: LCAppModel?) async -> Bool {
         // One install at a time: the signer is not reentrant.
         if progressVisible {
             report("lc.appList.installBusy".loc)
-            return
+            return false
         }
-        guard checkPrimaryInstance() else { return }
+        guard checkPrimaryInstance() else { return false }
 
         guard var installUrl = URL(string: urlString) else {
             report("lc.appList.urlInvalidError".loc)
-            return
+            return false
         }
 
         progressVisible = true
@@ -144,7 +221,7 @@ final class AnderInstaller: ObservableObject {
             let fileExtension = installUrl.pathExtension.lowercased()
             if fileExtension != "ipa" && fileExtension != "tipa" {
                 report("lc.appList.urlFileIsNotIpaError".loc)
-                return
+                return false
             }
 
             let fm = FileManager.default
@@ -163,7 +240,7 @@ final class AnderInstaller: ObservableObject {
                     didStartAccessing = resolvedURL.startAccessingSecurityScopedResource()
                 } catch {
                     report("Failed to resolve shared IPA bookmark: \(error.localizedDescription)")
-                    return
+                    return false
                 }
             }
 
@@ -173,7 +250,7 @@ final class AnderInstaller: ObservableObject {
 
             if !fm.isReadableFile(atPath: installUrl.path) && !didStartAccessing {
                 report("lc.appList.ipaAccessError".loc)
-                return
+                return false
             }
 
             defer {
@@ -183,9 +260,15 @@ final class AnderInstaller: ObservableObject {
             }
 
             do {
-                try await installIpaFile(installUrl, provenance: provenance)
+                try verifyChecksum(of: installUrl, expected: provenance?.expectedSHA256)
+                try await installIpaFile(installUrl,
+                                         provenance: provenance,
+                                         preferredReplacement: preferredReplacement)
+            } catch is CancellationError {
+                return false
             } catch {
                 report(error.localizedDescription)
+                return false
             }
 
             do {
@@ -199,31 +282,38 @@ final class AnderInstaller: ObservableObject {
                     try fm.removeItem(at: installUrl)
                 }
             } catch {
-                report(error.localizedDescription)
+                // Installation has already committed. Inbox cleanup is best-effort and must not
+                // turn a successful install into a failed batch result.
             }
-            return
+            return true
         }
 
         guard let downloader else {
             report("lc.appList.urlInvalidError".loc)
-            return
+            return false
         }
 
         do {
             let fileManager = FileManager.default
-            let destinationURL = fileManager.temporaryDirectory.appendingPathComponent(installUrl.lastPathComponent)
-            if fileManager.fileExists(atPath: destinationURL.path) {
-                try fileManager.removeItem(at: destinationURL)
-            }
+            let destinationURL = fileManager.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("ipa")
+            defer { try? fileManager.removeItem(at: destinationURL) }
 
             try await downloader.download(url: installUrl, to: destinationURL)
             if downloader.cancelled {
-                return
+                return false
             }
-            try await installIpaFile(destinationURL, provenance: provenance)
-            try fileManager.removeItem(at: destinationURL)
+            try verifyChecksum(of: destinationURL, expected: provenance?.expectedSHA256)
+            try await installIpaFile(destinationURL,
+                                     provenance: provenance,
+                                     preferredReplacement: preferredReplacement)
+            return true
+        } catch is CancellationError {
+            return false
         } catch {
             report(error.localizedDescription)
+            return false
         }
     }
 
@@ -234,7 +324,9 @@ final class AnderInstaller: ObservableObject {
     }
 
     @MainActor
-    private func installIpaFile(_ url: URL, provenance: AnderProvenance?) async throws {
+    private func installIpaFile(_ url: URL,
+                                provenance: AnderProvenance?,
+                                preferredReplacement: LCAppModel? = nil) async throws {
         let fm = FileManager()
 
         let installProgress = Progress.discreteProgress(totalUnitCount: 100)
@@ -246,12 +338,13 @@ final class AnderInstaller: ObservableObject {
         }
         let decompressProgress = Progress.discreteProgress(totalUnitCount: 100)
         installProgress.addChild(decompressProgress, withPendingUnitCount: 80)
-        let payloadPath = fm.temporaryDirectory.appendingPathComponent("Payload")
-        if fm.fileExists(atPath: payloadPath.path) {
-            try fm.removeItem(at: payloadPath)
-        }
+        let stagingRoot = fm.temporaryDirectory
+            .appendingPathComponent("ander-install-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+        let payloadPath = stagingRoot.appendingPathComponent("Payload", isDirectory: true)
 
-        guard await decompress(url.path, fm.temporaryDirectory.path, decompressProgress) == 0 else {
+        guard await decompress(url.path, stagingRoot.path, decompressProgress) == 0 else {
+            try? fm.removeItem(at: stagingRoot)
             throw "lc.appList.urlFileIsNotIpaError".loc
         }
 
@@ -284,6 +377,14 @@ final class AnderInstaller: ObservableObject {
         var appRelativePath = "\(newAppInfo.bundleIdentifier()!.sanitizeNonACSII()).app"
         var outputFolder = LCPath.bundlePath.appendingPathComponent(appRelativePath)
         var appToReplace: LCAppModel? = nil
+        var bundleSwap: AnderBundleSwap?
+        var transactionCommitted = false
+        defer {
+            try? fm.removeItem(at: stagingRoot)
+            if !transactionCommitted {
+                bundleSwap?.rollback()
+            }
+        }
         var sameBundleIdApp = sharedModel.apps.filter { app in
             return app.appInfo.bundleIdentifier()! == newAppInfo.bundleIdentifier()
         }
@@ -296,13 +397,10 @@ final class AnderInstaller: ObservableObject {
             if sameBundleIdApp.count > 0 && !sharedModel.isHiddenAppUnlocked {
                 do {
                     if !(try await LCUtils.authenticateUser()) {
-                        progressVisible = false
-                        return
+                        throw CancellationError()
                     }
                 } catch {
-                    report(error.localizedDescription)
-                    progressVisible = false
-                    return
+                    throw error
                 }
             }
         }
@@ -317,11 +415,11 @@ final class AnderInstaller: ObservableObject {
                                                 appToReplace: app))
             }
 
-            guard let installOptionChosen = await resolveConflict(options, provenance: provenance, among: sameBundleIdApp) else {
-                // user cancelled
-                progressVisible = false
-                try fm.removeItem(at: payloadPath)
-                return
+            guard let installOptionChosen = await resolveConflict(options,
+                                                                  provenance: provenance,
+                                                                  preferredReplacement: preferredReplacement,
+                                                                  among: sameBundleIdApp) else {
+                throw CancellationError()
             }
 
             if let appToReplace = installOptionChosen.appToReplace, appToReplace.uiIsShared {
@@ -331,44 +429,46 @@ final class AnderInstaller: ObservableObject {
             }
             appRelativePath = installOptionChosen.nameOfFolderToInstall
             appToReplace = installOptionChosen.appToReplace
-            if installOptionChosen.isReplace {
-                try fm.removeItem(at: outputFolder)
-            }
-        }
-        // Move it!
-        try fm.moveItem(at: appFolderPath, to: outputFolder)
-        let finalNewApp = LCAppInfo(bundlePath: outputFolder.path)
-        finalNewApp?.relativeBundlePath = appRelativePath
-
-        guard let finalNewApp else {
-            report("lc.appList.appInfoInitError".loc)
-            return
         }
 
-        // patch and sign it
+        guard let stagedNewApp = LCAppInfo(bundlePath: appFolderPath.path) else {
+            throw "lc.appList.appInfoInitError".loc
+        }
+        stagedNewApp.relativeBundlePath = appRelativePath
+
+        // Patch and sign entirely inside the staging directory. The installed bundle remains
+        // untouched until this succeeds, so a signer failure cannot interrupt a working app.
         var signError: String? = nil
         var signSuccess = false
         await withUnsafeContinuation({ c in
             if appToReplace?.uiDontSign ?? false || LCUtils.appGroupUserDefault.bool(forKey: "LCDontSignApp") {
-                finalNewApp.dontSign = true
+                stagedNewApp.dontSign = true
             }
-            finalNewApp.patchExecAndSignIfNeed(completionHandler: { success, error in
+            stagedNewApp.patchExecAndSignIfNeed(completionHandler: { success, error in
                 signError = error
                 signSuccess = success
                 c.resume()
             }, progressHandler: { signProgress in
-                installProgress.addChild(signProgress!, withPendingUnitCount: 20)
+                if let signProgress {
+                    installProgress.addChild(signProgress, withPendingUnitCount: 20)
+                }
             }, forceSign: false)
         })
 
-        // we leave it unsigned even if signing failed
-        if let signError {
-            if signSuccess {
-                report("\("lc.appList.signSuccessWithError".loc)\n\n\(signError)")
-            } else {
-                report(signError.loc)
-            }
+        if !signSuccess && !stagedNewApp.dontSign {
+            throw (signError ?? "lc.signer.latestCertificateInvalidErr").loc
         }
+
+        // Commit the prepared bundle. The narrow backup window below only starts after every
+        // fallible preparation step has completed, and the defer above restores on any error.
+        let swap = AnderBundleSwap(destination: outputFolder, fileManager: fm)
+        bundleSwap = swap
+        try swap.installPreparedBundle(from: appFolderPath)
+
+        guard let finalNewApp = LCAppInfo(bundlePath: outputFolder.path) else {
+            throw "lc.appList.appInfoInitError".loc
+        }
+        finalNewApp.relativeBundlePath = appRelativePath
 
         if let appToReplace {
             // copy previous configration to new app
@@ -415,30 +515,29 @@ final class AnderInstaller: ObservableObject {
         }
         finalNewApp.installationDate = Date.now
 
-        DispatchQueue.main.async {
-            if let appToReplace {
-                let newAppModel = LCAppModel(appInfo: finalNewApp)
+        if let appToReplace {
+            let newAppModel = LCAppModel(appInfo: finalNewApp)
 
-                if appToReplace.uiIsHidden {
-                    sharedModel.hiddenApps.removeAll { $0 == appToReplace }
-                    sharedModel.hiddenApps.append(newAppModel)
-                } else {
-                    sharedModel.apps.removeAll { $0 == appToReplace }
-                    sharedModel.apps.append(newAppModel)
-                }
+            if appToReplace.uiIsHidden {
+                sharedModel.hiddenApps.removeAll { $0 == appToReplace }
+                sharedModel.hiddenApps.append(newAppModel)
             } else {
-                let newAppModel = LCAppModel(appInfo: finalNewApp)
+                sharedModel.apps.removeAll { $0 == appToReplace }
                 sharedModel.apps.append(newAppModel)
-
-                // add url schemes
-                if let urlSchemes = finalNewApp.urlSchemes(), urlSchemes.count > 0 {
-                    UserDefaults.lcShared().mutableArrayValue(forKey: "LCGuestURLSchemes")
-                        .addObjects(from: urlSchemes as! [Any])
-                }
             }
+        } else {
+            let newAppModel = LCAppModel(appInfo: finalNewApp)
+            sharedModel.apps.append(newAppModel)
 
-            self.progressVisible = false
+            if let urlSchemes = finalNewApp.urlSchemes(), urlSchemes.count > 0 {
+                UserDefaults.lcShared().mutableArrayValue(forKey: "LCGuestURLSchemes")
+                    .addObjects(from: urlSchemes as! [Any])
+            }
         }
+
+        transactionCommitted = true
+        swap.commit()
+        progressVisible = false
     }
 
     // MARK: - Helpers
@@ -447,7 +546,12 @@ final class AnderInstaller: ObservableObject {
     @MainActor
     private func resolveConflict(_ options: [AppReplaceOption],
                                  provenance: AnderProvenance?,
+                                 preferredReplacement: LCAppModel?,
                                  among installed: [LCAppModel]) async -> AppReplaceOption? {
+        if let preferredReplacement,
+           let option = options.first(where: { $0.appToReplace == preferredReplacement }) {
+            return option
+        }
         if let provenance {
             let match = installed.first { $0.appInfo.anderStoreBundleId == provenance.storeBundleId }
             if let match,
@@ -457,6 +561,20 @@ final class AnderInstaller: ObservableObject {
         }
         guard let conflictResolver else { return nil }
         return await conflictResolver(options)
+    }
+
+    private func verifyChecksum(of url: URL, expected: String?) throws {
+        guard let expected, !expected.isEmpty else { return }
+        let normalized = expected.lowercased()
+        guard normalized.count == 64,
+              normalized.allSatisfy({ $0.isHexDigit }) else {
+            throw "lc.appList.invalidChecksum".loc
+        }
+
+        let actual = try AnderFileIntegrity.sha256(of: url)
+        guard actual == normalized else {
+            throw "lc.appList.checksumMismatch".loc
+        }
     }
 
     @MainActor

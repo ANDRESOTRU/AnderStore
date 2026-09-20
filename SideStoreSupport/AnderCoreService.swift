@@ -64,7 +64,7 @@ public final class AnderCoreService {
     }
 
     /// Bumped when the envelope itself changes shape. Core reports its own in `handshake`.
-    static let protocolVersion = 1
+    static let protocolVersion = 2
 
     /// Only these may be retried automatically after the connection dropped: everything else
     /// either talks to Apple or changes state, and a silent second attempt is how accounts get

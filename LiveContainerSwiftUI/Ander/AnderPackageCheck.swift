@@ -50,6 +50,8 @@ enum AnderPackageCheck {
 
     private static let fatMagic: UInt32 = 0xcafebabe
     private static let fatMagic64: UInt32 = 0xcafebabf
+    private static let fatMagicSwapped: UInt32 = 0xbebafeca
+    private static let fatMagic64Swapped: UInt32 = 0xbfbafeca
     private static let machMagic32: UInt32 = 0xfeedface
     private static let machMagic64: UInt32 = 0xfeedfacf
     private static let lcEncryptionInfo: UInt32 = 0x21
@@ -64,18 +66,22 @@ enum AnderPackageCheck {
         guard let rawMagic = readUInt32(data, 0, swapped: false) else { return false }
 
         // Universal binary: check every slice.
-        if rawMagic == fatMagic || rawMagic == fatMagic64 {
-            guard let count = readUInt32(data, 4, swapped: true) else { return false }
-            let entrySize = rawMagic == fatMagic64 ? 32 : 20
+        if rawMagic == fatMagic || rawMagic == fatMagic64
+            || rawMagic == fatMagicSwapped || rawMagic == fatMagic64Swapped {
+            // Universal Mach-O headers are normally big-endian. Because readUInt32 copies
+            // into the host's little-endian integer, their magic appears byte-swapped here.
+            let headerIsBigEndian = rawMagic == fatMagicSwapped || rawMagic == fatMagic64Swapped
+            guard let count = readUInt32(data, 4, swapped: headerIsBigEndian) else { return false }
+            let is64 = rawMagic == fatMagic64 || rawMagic == fatMagic64Swapped
+            let entrySize = is64 ? 32 : 20
             for index in 0..<Int(min(count, 32)) {
                 let entry = 8 + index * entrySize
                 let offset: UInt64
-                if rawMagic == fatMagic64 {
-                    guard let high = readUInt32(data, entry + 8, swapped: true),
-                          let low = readUInt32(data, entry + 12, swapped: true) else { return false }
-                    offset = (UInt64(high) << 32) | UInt64(low)
+                if is64 {
+                    guard let value = readUInt64(data, entry + 8, swapped: headerIsBigEndian) else { return false }
+                    offset = value
                 } else {
-                    guard let value = readUInt32(data, entry + 8, swapped: true) else { return false }
+                    guard let value = readUInt32(data, entry + 8, swapped: headerIsBigEndian) else { return false }
                     offset = UInt64(value)
                 }
                 if sliceIsEncrypted(data, at: Int(offset)) { return true }
@@ -119,6 +125,15 @@ enum AnderPackageCheck {
         var value: UInt32 = 0
         _ = withUnsafeMutableBytes(of: &value) { destination in
             data.copyBytes(to: destination, from: offset..<(offset + 4))
+        }
+        return swapped ? value.byteSwapped : value
+    }
+
+    private static func readUInt64(_ data: Data, _ offset: Int, swapped: Bool) -> UInt64? {
+        guard offset >= 0, offset + 8 <= data.count else { return nil }
+        var value: UInt64 = 0
+        _ = withUnsafeMutableBytes(of: &value) { destination in
+            data.copyBytes(to: destination, from: offset..<(offset + 8))
         }
         return swapped ? value.byteSwapped : value
     }

@@ -121,6 +121,11 @@
     }
 }
 
+- (NSString*)buildVersion {
+    NSString* build = _infoPlist[@"CFBundleVersion"];
+    return build ?: @"";
+}
+
 - (NSString*)bundleIdentifier {
     NSString* ans = nil;
     if([self doUseLCBundleId]) {

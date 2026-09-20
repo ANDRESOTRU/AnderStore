@@ -9,6 +9,7 @@ import SwiftUI
 @main
 struct LiveContainerSwiftUIApp : SwiftUI.App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     
     init() {
         AnderTheme.applyAppearance()
@@ -107,6 +108,11 @@ struct LiveContainerSwiftUIApp : SwiftUI.App {
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
                 .environmentObject(DataManager.shared.model)
                 .environmentObject(LCAppSortManager.shared)
+                .onChange(of: scenePhase) { phase in
+                    guard phase == .active else { return }
+                    AnderState.shared.refresh()
+                    AnderState.shared.autoRenewIfNeeded()
+                }
         }
         
         if UIApplication.shared.supportsMultipleScenes, #available(iOS 16.1, *) {

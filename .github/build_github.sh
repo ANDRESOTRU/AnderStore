@@ -74,5 +74,19 @@ if [ -n "$ANDERSTORE_VERSION" ]; then
   done
 fi
 
+# Versions shown by AnderStore's Components screen.
+CORE_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" ./Payload/LiveContainer.app/Frameworks/SideStoreApp.framework/Info.plist 2>/dev/null || echo "$ANDERSTORE_VERSION")
+LC_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" ./Payload/LiveContainer.app/Info.plist 2>/dev/null || echo "$ANDERSTORE_VERSION")
+cat > ./Payload/LiveContainer.app/components.json <<EOF
+{
+  "anderstore": "${ANDERSTORE_VERSION:-0}",
+  "core": "$CORE_VERSION",
+  "liveContainer": "$LC_VERSION",
+  "commit": "${GITHUB_SHA:-unknown}",
+  "buildDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+cp ./NOTICE.md ./Payload/LiveContainer.app/NOTICE.md
+
 # package
 zip -r "AnderStore.ipa" "Payload" -x "._*" -x ".DS_Store" -x "__MACOSX"

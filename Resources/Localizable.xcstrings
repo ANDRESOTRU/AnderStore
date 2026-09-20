@@ -34069,6 +34069,748 @@
         }
       }
     },
+    "lc.appList.invalidChecksum" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid checksum"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Неверная контрольная сумма"
+          }
+        }
+      }
+    },
+    "lc.appList.checksumMismatch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The downloaded IPA did not match the catalog SHA-256."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SHA-256 загруженного IPA не совпадает с каталогом."
+          }
+        }
+      }
+    },
+    "lc.sources.open" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть"
+          }
+        }
+      }
+    },
+    "lc.sources.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Description"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Описание"
+          }
+        }
+      }
+    },
+    "lc.sources.versionDetails" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version details"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сведения о версии"
+          }
+        }
+      }
+    },
+    "lc.updates.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updates"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновления"
+          }
+        }
+      }
+    },
+    "lc.updates.updateAll" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update All"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновить всё"
+          }
+        }
+      }
+    },
+    "lc.updates.liveApps" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live Apps"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live Apps"
+          }
+        }
+      }
+    },
+    "lc.updates.summaryTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update results"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Результаты обновления"
+          }
+        }
+      }
+    },
+    "lc.updates.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updated: %lld. Failed: %lld."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновлено: %lld. Ошибок: %lld."
+          }
+        }
+      }
+    },
+    "lc.updates.failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ошибки: %@"
+          }
+        }
+      }
+    },
+    "lc.device.certificates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Certificates"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сертификаты"
+          }
+        }
+      }
+    },
+    "lc.device.appIDs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App IDs"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App ID"
+          }
+        }
+      }
+    },
+    "lc.device.profiles" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Provisioning Profiles"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Профили"
+          }
+        }
+      }
+    },
+    "lc.device.components" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Components"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Компоненты"
+          }
+        }
+      }
+    },
+    "lc.account.signOut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign Out"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выйти"
+          }
+        }
+      }
+    },
+    "lc.certificates.import" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import .p12"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Импортировать .p12"
+          }
+        }
+      }
+    },
+    "lc.certificates.export" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export .p12"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Экспортировать .p12"
+          }
+        }
+      }
+    },
+    "lc.certificates.revoke" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отозвать"
+          }
+        }
+      }
+    },
+    "lc.certificates.revokeTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke certificate?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отозвать сертификат?"
+          }
+        }
+      }
+    },
+    "lc.certificates.revokeWarning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps signed with this certificate may stop launching."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приложения, подписанные этим сертификатом, могут перестать запускаться."
+          }
+        }
+      }
+    },
+    "lc.certificates.importPassword" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import password"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пароль импорта"
+          }
+        }
+      }
+    },
+    "lc.certificates.exportPassword" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export password"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пароль экспорта"
+          }
+        }
+      }
+    },
+    "lc.certificates.password" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пароль"
+          }
+        }
+      }
+    },
+    "lc.certificates.exportPasswordHint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A password is required to protect the exported certificate."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Для защиты экспортируемого сертификата требуется пароль."
+          }
+        }
+      }
+    },
+    "lc.appIDs.deleteTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete App ID?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Удалить App ID?"
+          }
+        }
+      }
+    },
+    "lc.appIDs.deleteWarning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The App ID will be removed from the Apple Developer portal."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App ID будет удалён с портала Apple Developer."
+          }
+        }
+      }
+    },
+    "lc.readiness.needsVPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable LocalDevVPN to renew apps."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Включите LocalDevVPN для продления приложений."
+          }
+        }
+      }
+    },
+    "lc.readiness.renewed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps were renewed successfully."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приложения успешно продлены."
+          }
+        }
+      }
+    },
+    "lc.readiness.resignSkipped" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skipped running apps: %@."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пропущено запущенных приложений: %@."
+          }
+        }
+      }
+    },
+    "lc.readiness.resignFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not re-sign: %@."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось переподписать: %@."
+          }
+        }
+      }
+    },
+    "lc.readiness.resignComplete" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Re-signed: %lld."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переподписано: %lld."
+          }
+        }
+      }
+    },
+    "lc.components.buildDate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Build date"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дата сборки"
+          }
+        }
+      }
+    },
+    "lc.components.latest" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latest: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Последняя: %@"
+          }
+        }
+      }
+    },
+    "lc.readiness.checking" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Checking device readiness…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверяем готовность устройства…" } }
+      }
+    },
+    "lc.readiness.ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready to launch apps" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Готово к запуску приложений" } }
+      }
+    },
+    "lc.readiness.needsAccount" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in with an Apple ID to prepare this device." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Войдите в Apple ID, чтобы подготовить устройство." } }
+      }
+    },
+    "lc.readiness.needsCertificate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create or import a signing certificate." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создайте или импортируйте сертификат подписи." } }
+      }
+    },
+    "lc.readiness.invalidCertificate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The local signing certificate is expired or invalid." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Локальный сертификат подписи истёк или недействителен." } }
+      }
+    },
+    "lc.readiness.needsPairing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The pairing file is missing or invalid." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Файл сопряжения отсутствует или недействителен." } }
+      }
+    },
+    "lc.readiness.needsJITLess" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "JITLess validation has not completed successfully." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверка JITLess не завершилась успешно." } }
+      }
+    },
+    "lc.readiness.fix" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show setup steps" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать настройку" } }
+      }
+    },
+    "lc.readiness.jitTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Validate JITLess" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверьте JITLess" } }
+      }
+    },
+    "lc.readiness.jitText" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "AnderStore verifies the certificate and device connection automatically." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "AnderStore автоматически проверяет сертификат и соединение с устройством." } }
+      }
+    },
+    "lc.setup.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Device setup" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройка устройства" } }
+      }
+    },
+    "lc.setup.vpnTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect LocalDevVPN" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключите LocalDevVPN" } }
+      }
+    },
+    "lc.setup.vpnText" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install LocalDevVPN using the AnderStore installer, allow it to add a VPN configuration, then tap Connect. Keep it connected while signing or renewing apps." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Установите LocalDevVPN через установщик AnderStore, разрешите добавить конфигурацию VPN и нажмите «Подключить». Не отключайте VPN во время подписи и продления приложений." } }
+      }
+    },
+    "lc.setup.trustTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Trust the profile" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Доверьте профилю" } }
+      }
+    },
+    "lc.setup.trustText" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Settings → General → VPN & Device Management, select the developer profile used for AnderStore, and confirm Trust." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Откройте «Настройки» → «Основные» → «VPN и управление устройством», выберите профиль разработчика AnderStore и подтвердите доверие." } }
+      }
+    },
+    "lc.setup.developerTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable Developer Mode" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Включите режим разработчика" } }
+      }
+    },
+    "lc.setup.developerText" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Settings → Privacy & Security → Developer Mode, turn it on, restart the iPhone when asked, and confirm after restart." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Откройте «Настройки» → «Конфиденциальность и безопасность» → «Режим разработчика», включите его, перезагрузите iPhone и подтвердите включение после перезапуска." } }
+      }
+    },
+    "lc.certificates.privateKeyPresent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Private key available" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Закрытый ключ доступен" } }
+      }
+    },
+    "lc.certificates.privateKeyMissing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No private key" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Закрытого ключа нет" } }
+      }
+    },
+    "lc.certificates.local" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Локальный" } }
+      }
+    },
+    "lc.certificates.portal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apple Developer portal" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Портал Apple Developer" } }
+      }
+    },
+    "lc.common.retry" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try Again"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторить"
+          }
+        }
+      }
+    },
     "lc.account.waitBeforeRetry" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -16,7 +16,7 @@ import SideSign
 final class AnderCoreBridge: NSObject {
 
     /// Bumped together with AnderCoreService.protocolVersion when the envelope changes shape.
-    private static let protocolVersion = 1
+    private static let protocolVersion = 2
 
     private static let commands: [String] = [
         "handshake",
@@ -25,7 +25,16 @@ final class AnderCoreBridge: NSObject {
         "account.status",
         "account.signOut",
         "snapshot",
-        "self.update"
+        "self.update",
+        "apps.refresh",
+        "certificates.list",
+        "certificates.revoke",
+        "certificates.importP12",
+        "certificates.exportP12",
+        "appIDs.list",
+        "appIDs.delete",
+        "profiles.list",
+        "device.status"
     ]
 
     nonisolated(unsafe) private static var activeSignIn: XPCSignInHandler?
@@ -63,7 +72,8 @@ final class AnderCoreBridge: NSObject {
             accountStatus { status in completion(status, nil) }
 
         case "account.signOut":
-            AuthManager.shared.signOut()
+            let keepCertificate = request["keepCertificate"] as? Bool ?? true
+            AuthManager.shared.signOut(keepCertificate: keepCertificate)
             completion([:], nil)
 
         case "snapshot":
@@ -72,6 +82,56 @@ final class AnderCoreBridge: NSObject {
 
         case "self.update":
             updateSelf(onEvent: onEvent, completion: completion)
+
+        case "apps.refresh":
+            refreshApps(onEvent: onEvent, completion: completion)
+
+        case "certificates.list":
+            listCertificates(completion: completion)
+
+        case "certificates.revoke":
+            guard let serialNumber = request["serialNumber"] as? String else {
+                completion(nil, badParameters("serialNumber"))
+                return
+            }
+            revokeCertificate(serialNumber: serialNumber, completion: completion)
+
+        case "certificates.importP12":
+            guard let encoded = request["data"] as? String,
+                  let data = Data(base64Encoded: encoded) else {
+                completion(nil, badParameters("data"))
+                return
+            }
+            importCertificate(data: data,
+                              password: request["password"] as? String,
+                              completion: completion)
+
+        case "certificates.exportP12":
+            guard let serialNumber = request["serialNumber"] as? String,
+                  let password = request["password"] as? String,
+                  !password.isEmpty else {
+                completion(nil, badParameters("serialNumber, password"))
+                return
+            }
+            exportCertificate(serialNumber: serialNumber,
+                              password: password,
+                              completion: completion)
+
+        case "appIDs.list":
+            listAppIDs(completion: completion)
+
+        case "appIDs.delete":
+            guard let identifier = request["identifier"] as? String else {
+                completion(nil, badParameters("identifier"))
+                return
+            }
+            deleteAppID(identifier: identifier, completion: completion)
+
+        case "profiles.list":
+            listProfiles(completion: completion)
+
+        case "device.status":
+            deviceStatus(completion: completion)
 
         default:
             completion(nil, ["kind": "unsupportedCommand", "message": command])
@@ -234,6 +294,215 @@ final class AnderCoreBridge: NSObject {
                         onEvent(["kind": "progress", "value": value])
                     }
                 }
+            }
+        }
+    }
+
+    private static func refreshApps(onEvent: @escaping ([String: Any]) -> Void,
+                                    completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        let context = DatabaseManager.shared.viewContext
+        context.perform {
+            let request: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
+            let installed = (try? context.fetch(request)) ?? []
+            guard !installed.isEmpty else {
+                completion(nil, ["kind": "noInstalledApps", "message": "No installed apps"])
+                return
+            }
+
+            let group = AppManager.shared.refresh(installed, presentingViewController: nil)
+            var observation: NSKeyValueObservation?
+            observation = group.progress.observe(\.fractionCompleted, options: [.new]) { _, change in
+                if let value = change.newValue {
+                    onEvent(["kind": "progress", "value": value])
+                }
+            }
+            group.completionHandler = { results in
+                observation?.invalidate()
+                for result in results.values {
+                    if case .failure(let error) = result {
+                        completion(nil, errorPayload(error))
+                        return
+                    }
+                }
+                completion(["refreshed": results.count], nil)
+            }
+        }
+    }
+
+    private static func listCertificates(completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        Task {
+            let activeSerial = CertificateManager.shared.activeCertificate?.certificate.serialNumber
+            let local = CertificateManager.shared.getAllLocalX509Certificates()
+            let localSerials = Set(local.map(\.serialNumber))
+            let privateKeySerials = Set(local.compactMap { certificate in
+                CertificateManager.shared.getSignableCertificate(for: certificate.serialNumber) == nil
+                    ? nil : certificate.serialNumber
+            })
+
+            var remote: [ALTX509Certificate] = []
+            var portalFailure: [String: Any]?
+            do {
+                remote = try await DeveloperPortalProxy.shared.fetchCertificates()
+            } catch {
+                portalFailure = errorPayload(error)
+                if local.isEmpty {
+                    completion(nil, portalFailure)
+                    return
+                }
+            }
+
+            var payload = remote.map { certificate in
+                var item: [String: Any] = [
+                    "name": certificate.name,
+                    "serialNumber": certificate.serialNumber,
+                    "creationDate": certificate.creationDate,
+                    "expiryDate": certificate.expiryDate,
+                    "isActive": certificate.serialNumber == activeSerial,
+                    "hasPrivateKey": privateKeySerials.contains(certificate.serialNumber),
+                    "isLocal": localSerials.contains(certificate.serialNumber),
+                    "isPortal": true
+                ]
+                if let identifier = certificate.identifier { item["identifier"] = identifier }
+                return item
+            }
+            let remoteSerials = Set(remote.map(\.serialNumber))
+            payload += local.filter { !remoteSerials.contains($0.serialNumber) }.map { certificate in
+                [
+                    "name": certificate.name,
+                    "serialNumber": certificate.serialNumber,
+                    "creationDate": certificate.creationDate,
+                    "expiryDate": certificate.expiryDate,
+                    "isActive": certificate.serialNumber == activeSerial,
+                    "hasPrivateKey": privateKeySerials.contains(certificate.serialNumber),
+                    "isLocal": true,
+                    "isPortal": false
+                ]
+            }
+            var response: [String: Any] = ["certificates": payload]
+            if let portalFailure { response["portalFailure"] = portalFailure }
+            completion(response, nil)
+        }
+    }
+
+    private static func revokeCertificate(serialNumber: String,
+                                          completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        Task {
+            do {
+                let certificates = try await DeveloperPortalProxy.shared.fetchCertificates()
+                guard let certificate = certificates.first(where: { $0.serialNumber == serialNumber }) else {
+                    completion(nil, ["kind": "notFound", "message": "Certificate not found"])
+                    return
+                }
+                _ = try await DeveloperPortalProxy.shared.revokeCertificate(certificate)
+                completion(["revoked": true], nil)
+            } catch {
+                completion(nil, errorPayload(error))
+            }
+        }
+    }
+
+    private static func importCertificate(data: Data,
+                                          password: String?,
+                                          completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        do {
+            let certificate = try CertificateManager.parse(data, password: password)
+            try CertificateManager.shared.setActiveCertificate(certificate)
+            CertificateManager.shared.saveCertificate(certificate)
+            completion(["serialNumber": certificate.serialNumber], nil)
+        } catch {
+            completion(nil, errorPayload(error))
+        }
+    }
+
+    private static func exportCertificate(serialNumber: String,
+                                          password: String,
+                                          completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        do {
+            guard let certificate = CertificateManager.shared.getSignableCertificate(for: serialNumber) else {
+                completion(nil, ["kind": "privateKeyMissing", "message": "Private key is unavailable"])
+                return
+            }
+            let data = try CertificateManager.convert(certificate, password: password)
+            completion(["data": data.base64EncodedString(), "filename": "certificate-\(certificate.serialNumber).p12"], nil)
+        } catch {
+            completion(nil, errorPayload(error))
+        }
+    }
+
+    private static func listAppIDs(completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        Task {
+            do {
+                let appIDs = try await DeveloperPortalProxy.shared.fetchAppIDs()
+                let payload = appIDs.map { appID -> [String: Any] in
+                    var item: [String: Any] = [
+                        "name": appID.name,
+                        "identifier": appID.identifier,
+                        "bundleIdentifier": appID.bundleIdentifier
+                    ]
+                    if let expirationDate = appID.expirationDate { item["expirationDate"] = expirationDate }
+                    return item
+                }
+                completion(["appIDs": payload], nil)
+            } catch {
+                completion(nil, errorPayload(error))
+            }
+        }
+    }
+
+    private static func deleteAppID(identifier: String,
+                                    completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        Task {
+            do {
+                let appIDs = try await DeveloperPortalProxy.shared.fetchAppIDs()
+                guard let appID = appIDs.first(where: { $0.identifier == identifier }) else {
+                    completion(nil, ["kind": "notFound", "message": "App ID not found"])
+                    return
+                }
+                _ = try await DeveloperPortalProxy.shared.deleteAppID(appID)
+                completion(["deleted": true], nil)
+            } catch {
+                completion(nil, errorPayload(error))
+            }
+        }
+    }
+
+    private static func listProfiles(completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        Task {
+            do {
+                let profiles = try await DeveloperPortalProxy.shared.listProvisioningProfiles()
+                let payload = profiles.map { profile -> [String: Any] in
+                    var item: [String: Any] = [
+                        "name": profile.name,
+                        "uuid": profile.uuid.uuidString
+                    ]
+                    if let identifier = profile.identifier { item["identifier"] = identifier }
+                    if let bundleIdentifier = profile.bundleIdentifier { item["bundleIdentifier"] = bundleIdentifier }
+                    return item
+                }
+                completion(["profiles": payload], nil)
+            } catch {
+                completion(nil, errorPayload(error))
+            }
+        }
+    }
+
+    private static func deviceStatus(completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        Task {
+            let hasPairingFile = PairingFileManager.shared.fetchPairingFile() != nil
+            let readiness = await isMinimuxerReady()
+            switch readiness {
+            case .success(let ready):
+                completion(["ready": ready, "vpnReady": ready, "pairingReady": hasPairingFile], nil)
+            case .failure(let error):
+                let operationError = error.asOperationError
+                let failure = errorPayload(operationError)
+                let kind = failure["kind"] as? String
+                completion([
+                    "ready": false,
+                    "vpnReady": kind != "noVPN",
+                    "pairingReady": hasPairingFile && kind != "needsPairing",
+                    "failure": failure
+                ], nil)
             }
         }
     }

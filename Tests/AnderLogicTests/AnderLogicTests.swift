@@ -1,0 +1,69 @@
+import Foundation
+import XCTest
+@testable import AnderLogic
+
+final class AnderLogicTests: XCTestCase {
+    func testNumericVersionsAndBuilds() {
+        XCTAssertFalse(AnderVersioning.isNewer(version: "1.2.0", build: "10", than: "1.2", currentBuild: "10"))
+        XCTAssertTrue(AnderVersioning.isNewer(version: "1.2", build: "11", than: "1.2.0", currentBuild: "10"))
+        XCTAssertFalse(AnderVersioning.isNewer(version: "1.1.9", build: "999", than: "1.2", currentBuild: "1"))
+    }
+
+    func testProvenanceRequiresBothExactFields() {
+        XCTAssertTrue(AnderProvenanceIdentity.matches(installedSourceURL: "https://store.test/source.json",
+                                                       installedBundleID: "test.app",
+                                                       sourceURL: "https://store.test/source.json",
+                                                       bundleID: "test.app"))
+        XCTAssertFalse(AnderProvenanceIdentity.matches(installedSourceURL: nil,
+                                                        installedBundleID: "test.app",
+                                                        sourceURL: "https://store.test/source.json",
+                                                        bundleID: "test.app"))
+        XCTAssertFalse(AnderProvenanceIdentity.matches(installedSourceURL: "https://other.test/source.json",
+                                                        installedBundleID: "test.app",
+                                                        sourceURL: "https://store.test/source.json",
+                                                        bundleID: "test.app"))
+    }
+
+    func testSHA256() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data("AnderStore".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertEqual(try AnderFileIntegrity.sha256(of: file),
+                       "85904ab99a53458bc7548d1b8842fc78d4f72c9fd2e850ccd0623f7df673ef86")
+    }
+
+    func testCatalogAndUpdatesDecoding() throws {
+        let catalog = #"{"name":"Test","apps":[{"name":"App","bundleIdentifier":"test.app","versions":[{"version":"2.0","buildNumber":"20","downloadURL":"app.ipa","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","minOSVersion":"16.0"}]}]}"#
+        let source = try JSONDecoder().decode(AltStoreSourceResponse.self, from: Data(catalog.utf8))
+        let version = try XCTUnwrap(source.apps?.first?.versions?.first)
+        XCTAssertEqual(version.buildVersion, "20")
+        XCTAssertEqual(version.minimumOSVersion, "16.0")
+        XCTAssertEqual(version.sha256?.count, 64)
+
+        let artifact = #"{"version":"1.6.0","url":"https://example.test/file","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
+        let updates = "{\"anderstore\":\(artifact),\"core\":\(artifact),\"liveContainer\":\(artifact),\"installer\":\(artifact)}"
+        let manifest = try JSONDecoder().decode(AnderUpdatesManifest.self, from: Data(updates.utf8))
+        XCTAssertEqual(manifest.anderstore.version, "1.6.0")
+        XCTAssertEqual(manifest.installer.sha256?.count, 64)
+    }
+
+    func testBundleReplacementRollsBack() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("App.app")
+        let prepared = root.appendingPathComponent("Prepared.app")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: destination.appendingPathComponent("marker"))
+        try FileManager.default.createDirectory(at: prepared, withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: prepared.appendingPathComponent("marker"))
+
+        let transaction = AnderBundleSwap(destination: destination)
+        try transaction.installPreparedBundle(from: prepared)
+        transaction.rollback()
+
+        let restored = try String(contentsOf: destination.appendingPathComponent("marker"), encoding: .utf8)
+        XCTAssertEqual(restored, "old")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: prepared.path))
+    }
+}

@@ -655,13 +655,11 @@ struct AnderAccountView: View {
 
     @AppStorage("anderLatestVersion") private var latestVersion = ""
     @AppStorage("anderLatestNotes") private var latestNotes = ""
-    @AppStorage("anderLastAutoRefresh") private var lastAutoRefresh = 0.0
     @State private var updateCheckState: String? = nil
     @AppStorage("anderSignInBlockedUntil") private var signInBlockedUntil = 0.0
     private var updateAvailable: Bool { !latestVersion.isEmpty && AnderUpdateChecker.isNewer(latestVersion, than: AnderUpdateChecker.currentVersion) }
 
     @EnvironmentObject private var sharedModel: SharedModel
-    @AppStorage("anderVPNInstalled") private var vpnInstalled = false
     @AppStorage("anderAppleID") private var savedAppleID = ""
 
     @ObservedObject private var state = AnderState.shared
@@ -674,9 +672,10 @@ struct AnderAccountView: View {
     @State private var code = ""
     @State private var message: String? = nil
     @State private var showSignInForm = false
+    @State private var showSetupInstructions = false
 
-    private var signedIn: Bool { !savedAppleID.isEmpty }
-    private var allDone: Bool { signedIn && certificateReady && vpnInstalled }
+    private var signedIn: Bool { state.account.signedIn || !savedAppleID.isEmpty }
+    private var allDone: Bool { state.readiness == .ready }
     private var busy: Bool {
         if case .idle = phase { return false }
         return true
@@ -687,12 +686,14 @@ struct AnderAccountView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     header
+                    readinessCard
                     if updateAvailable || isUpdating {
                         updateCard
                     }
                     signatureCard
                     updateCheckRow
                     accountCard
+                    managementCard
                     if case .needsCode(let prompt) = phase {
                         codeCard(prompt: prompt)
                     }
@@ -703,25 +704,27 @@ struct AnderAccountView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .anderCard()
                     }
+                    if let resignSummary = state.resignSummary {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(resignSummary).font(.footnote)
+                            Button("lc.common.retry".loc) {
+                                state.certificateDidChange()
+                            }
+                            .font(.footnote.weight(.semibold))
+                            .foregroundColor(AnderTheme.accent)
+                        }
+                        .anderCard()
+                    }
                     if allDone {
                         doneCard
                     } else {
                         checklist
                     }
                     Button {
-                        if let url = URL(string: "https://store.andresot.uk/help") {
-                            UIApplication.shared.open(url)
-                        }
+                        showSetupInstructions = true
                     } label: {
                         Label("lc.account.help".loc, systemImage: "questionmark.circle")
                             .foregroundColor(AnderTheme.accent)
-                    }
-                    if sharedModel.developerMode {
-                        Button("lc.account.advanced".loc) {
-                            LCUtils.openSideStore()
-                        }
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                     }
                 }
                 .padding(16)
@@ -729,12 +732,53 @@ struct AnderAccountView: View {
             .background(AnderTheme.background.ignoresSafeArea())
             .navigationTitle("lc.tabView.device".loc)
             .onAppear(perform: reload)
+            .sheet(isPresented: $showSetupInstructions) {
+                NavigationView { AnderSetupInstructionsView() }
+            }
         }
     }
 
     private var isUpdating: Bool {
         if case .updating = phase { return true }
         return false
+    }
+
+    private var readinessCard: some View {
+        let presentation: (icon: String, color: Color, text: String, canFix: Bool) = {
+            switch state.readiness {
+            case .checking:
+                return ("hourglass", .secondary, "lc.readiness.checking".loc, false)
+            case .needsAccount:
+                return ("person.crop.circle.badge.exclamationmark", .orange, "lc.readiness.needsAccount".loc, false)
+            case .needsCertificate:
+                return ("key.slash", .orange, "lc.readiness.needsCertificate".loc, false)
+            case .invalidCertificate:
+                return ("xmark.seal", .red, "lc.readiness.invalidCertificate".loc, false)
+            case .needsPairing:
+                return ("iphone.and.arrow.forward", .orange, "lc.readiness.needsPairing".loc, true)
+            case .needsVPN:
+                return ("shield.slash", .orange, "lc.readiness.needsVPN".loc, true)
+            case .needsJITLess:
+                return ("bolt.slash", .orange, "lc.readiness.needsJITLess".loc, true)
+            case .ready:
+                return ("checkmark.circle.fill", .green, "lc.readiness.ready".loc, false)
+            }
+        }()
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: presentation.icon)
+                .font(.title2)
+                .foregroundColor(presentation.color)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(presentation.text).font(.body.weight(.medium))
+                if presentation.canFix {
+                    Button("lc.readiness.fix".loc) { showSetupInstructions = true }
+                        .font(.footnote.weight(.semibold))
+                        .foregroundColor(AnderTheme.accent)
+                }
+            }
+            Spacer()
+        }
+        .anderCard()
     }
 
     private func updateSelf() {
@@ -836,18 +880,6 @@ struct AnderAccountView: View {
         .anderCard()
     }
 
-    /// Продлевает подпись сама, когда осталось мало дней (не чаще раза в 6 часов).
-    private func autoRefreshIfNeeded() {
-        guard coreAvailable, signedIn, !busy,
-              signInCooldown == 0,
-              let expiration,
-              AnderSignature.daysLeft(until: expiration) <= 3,
-              Date().timeIntervalSince1970 - lastAutoRefresh > 6 * 3600
-        else { return }
-        lastAutoRefresh = Date().timeIntervalSince1970
-        refresh()
-    }
-
     private func reload() {
         AnderUpdateChecker.checkIfNeeded()
         certificateReady = LCSharedUtils.certificatePassword() != nil
@@ -858,7 +890,9 @@ struct AnderAccountView: View {
         }
         // Paints from the cached snapshot; only goes to Core when that snapshot is old.
         state.refresh()
-        autoRefreshIfNeeded()
+        state.refreshDeviceStatus()
+        state.validateLocalSetup()
+        state.autoRenewIfNeeded()
         // Core is started only by the Sign in / Refresh buttons, never on opening the tab
     }
 
@@ -899,7 +933,7 @@ struct AnderAccountView: View {
             savedAppleID = account ?? appleID
             showSignInForm = false
             certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
-            state.invalidate()
+            state.certificateDidChange()
         })
         if !started {
             phase = .idle
@@ -929,7 +963,7 @@ struct AnderAccountView: View {
             } else {
                 certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
                 expiration = AnderSignature.expirationDate()
-                state.invalidate()
+                state.certificateDidChange()
             }
         })
         if !started {
@@ -1004,8 +1038,68 @@ struct AnderAccountView: View {
                 }
                 .disabled(busy || !signedIn)
             }
+            renewalStatus
         }
         .anderCard()
+    }
+
+    @ViewBuilder
+    private var renewalStatus: some View {
+        switch state.renewalState {
+        case .idle:
+            EmptyView()
+        case .refreshing(let value):
+            ProgressView(value: value)
+            Text("lc.account.refreshing".loc).font(.footnote).foregroundStyle(.secondary)
+        case .needsVPN:
+            Text("lc.readiness.needsVPN".loc).font(.footnote).foregroundStyle(.orange)
+        case .failed(let message):
+            Text(message).font(.footnote).foregroundStyle(.red)
+        case .complete:
+            Text("lc.readiness.renewed".loc).font(.footnote).foregroundStyle(.green)
+        }
+    }
+
+    private var managementCard: some View {
+        VStack(spacing: 0) {
+            NavigationLink(destination: AnderCertificatesView()) {
+                managementRow("lc.device.certificates".loc, icon: "checkmark.seal")
+            }
+            Divider()
+            NavigationLink(destination: AnderAppIDsView()) {
+                managementRow("lc.device.appIDs".loc, icon: "app.badge")
+            }
+            Divider()
+            Text("lc.account.advanced".loc)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 10)
+            NavigationLink(destination: AnderProfilesView()) {
+                managementRow("lc.device.profiles".loc, icon: "doc.text")
+            }
+            if signedIn {
+                Divider()
+                Button(role: .destructive) {
+                    AnderDeviceManagementModel.shared.signOut()
+                    savedAppleID = ""
+                } label: {
+                    managementRow("lc.account.signOut".loc, icon: "rectangle.portrait.and.arrow.right")
+                }
+            }
+        }
+        .anderCard()
+    }
+
+    private func managementRow(_ title: String, icon: String) -> some View {
+        HStack {
+            Image(systemName: icon).frame(width: 24)
+            Text(title)
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -1111,10 +1205,15 @@ struct AnderAccountView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("lc.account.setupTitle".loc).font(.headline)
             checklistRow(done: signedIn, number: 1, title: "lc.account.stepLogin".loc, detail: "lc.account.stepLoginDesc".loc)
-            checklistRow(done: certificateReady, number: 2, title: "lc.account.stepCert".loc, detail: "lc.account.stepCertDesc".loc)
-            checklistRow(done: vpnInstalled, number: 3, title: "lc.account.stepVPN".loc, detail: "lc.account.stepVPNDesc".loc,
+            checklistRow(done: state.certificateValid, number: 2, title: "lc.account.stepCert".loc, detail: "lc.account.stepCertDesc".loc)
+            checklistRow(done: state.vpnReady && state.pairingReady, number: 3, title: "lc.account.stepVPN".loc, detail: "lc.account.stepVPNDesc".loc,
                          action: "lc.account.stepVPNAction".loc) {
-                vpnInstalled = true
+                showSetupInstructions = true
+            }
+            checklistRow(done: state.jitLessReady, number: 4, title: "lc.readiness.jitTitle".loc,
+                         detail: "lc.readiness.jitText".loc,
+                         action: "lc.readiness.fix".loc) {
+                showSetupInstructions = true
             }
         }
         .anderCard()
@@ -1245,6 +1344,15 @@ struct AnderAboutView: View {
         License(project: "LiveContainer", license: "AGPL-3.0", url: "https://github.com/LiveContainer/LiveContainer"),
         License(project: "SideStore", license: "AGPL-3.0", url: "https://github.com/SideStore/SideStore"),
         License(project: "AltStore", license: "AGPL-3.0", url: "https://github.com/altstoreio/AltStore"),
+        License(project: "litehook", license: "MIT", url: "https://github.com/LiveContainer/litehook"),
+        License(project: "OpenSSL", license: "Apache-2.0", url: "https://github.com/krzyzanowskim/OpenSSL"),
+        License(project: "ZSign", license: "MIT", url: "https://github.com/zhlynn/zsign"),
+        License(project: "minimuxer", license: "MPL-2.0", url: "https://github.com/SideStore/minimuxer"),
+        License(project: "SideSign", license: "AGPL-3.0", url: "https://github.com/SideStore/SideSign"),
+        License(project: "Roxas", license: "BSD", url: "https://github.com/SideStore/Roxas"),
+        License(project: "fishhook", license: "BSD", url: "https://github.com/facebook/fishhook"),
+        License(project: "KeychainAccess", license: "MIT", url: "https://github.com/kishikawakatsumi/KeychainAccess"),
+        License(project: "Nuke", license: "MIT", url: "https://github.com/kean/Nuke")
     ]
 
     var body: some View {
@@ -1298,6 +1406,9 @@ struct AnderAboutView: View {
             Section {
                 Button("github.com/ANDRESOTRU/AnderStore") {
                     UIApplication.shared.open(URL(string: "https://github.com/ANDRESOTRU/AnderStore")!)
+                }
+                NavigationLink("lc.device.components".loc) {
+                    AnderComponentsView()
                 }
             } header: {
                 Text("lc.about.sourceCode".loc)

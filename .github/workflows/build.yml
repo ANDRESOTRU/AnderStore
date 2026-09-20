@@ -31,6 +31,9 @@ jobs:
       - name: Install build tools
         run: brew install ldid xcbeautify
 
+      - name: Test AnderStore logic
+        run: swift test
+
       - name: Pre-populate Core binary artifacts
         run: |
           ARTIFACTS_DIR="$HOME/Library/Caches/org.swift.swiftpm/artifacts"
@@ -73,7 +76,7 @@ jobs:
       - name: Set AnderStore version
         id: version
         run: |
-          VERSION="1.1.${{ github.run_number }}"
+          VERSION="1.6.${{ github.run_number }}"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" LiveContainer/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" LiveContainer/Info.plist
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -96,12 +99,15 @@ jobs:
       - name: Create IPA
         run: |
           sh .github/build_github.sh
+          unzip -p AnderStore.ipa Payload/LiveContainer.app/components.json > components.json
 
       - name: Upload AnderStore
         uses: actions/upload-artifact@v7
         with:
           name: AnderStore.ipa
-          path: AnderStore.ipa
+          path: |
+            AnderStore.ipa
+            components.json
 
   release__nightly:
     name: Nightly Release
@@ -136,7 +142,7 @@ jobs:
           ls -la AnderStore.ipa
           # Старый nightly-релиз удаляем и создаём заново: обновление старого релиза упирается в 403.
           gh release delete nightly --yes --cleanup-tag || echo "нечего удалять"
-          gh release create nightly AnderStore.ipa             --title "AnderStore Nightly"             --prerelease             --target "${{ github.sha }}"             --notes "AnderStore — сборка от ${{ env.COMMIT_SHA }}
+          gh release create nightly AnderStore.ipa components.json             --title "AnderStore Nightly"             --prerelease             --target "${{ github.sha }}"             --notes "AnderStore — сборка от ${{ env.COMMIT_SHA }}
 
           **Изменение:** ${{ env.COMMIT_MSG }}
 
@@ -144,5 +150,5 @@ jobs:
           gh release view nightly --json assets --jq ".assets[].name"
           # Versioned release for self-update from inside AnderStore (store.andresot.uk picks it up)
           VERSION="${{ needs.build.outputs.version }}"
-          gh release create "v$VERSION" AnderStore.ipa             --title "AnderStore $VERSION"             --target "${{ github.sha }}"             --latest             --notes "${{ env.COMMIT_MSG }}"
+          gh release create "v$VERSION" AnderStore.ipa components.json             --title "AnderStore $VERSION"             --target "${{ github.sha }}"             --latest             --notes "${{ env.COMMIT_MSG }}"
           gh release view "v$VERSION" --json assets --jq ".assets[].name"

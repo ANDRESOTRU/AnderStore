@@ -164,13 +164,8 @@ public final class AnderCoreBridgeHost: NSObject {
 
         Task { @MainActor in
             do {
-                let response: [String: Any]
-                if command == "apps.refresh" {
-                    response = try await runLegacyRefresh(onEvent: onEvent)
-                } else {
-                    response = try await AnderCoreService.shared.perform(command, params: params) { event in
-                        onEvent(event)
-                    }
+                let response = try await AnderCoreService.shared.perform(command, params: params) { event in
+                    onEvent(event)
                 }
                 completion(response, nil)
             } catch let error as AnderCoreError {
@@ -185,21 +180,5 @@ public final class AnderCoreBridgeHost: NSObject {
     @objc(shutdown)
     public static func shutdown() {
         Task { @MainActor in AnderCoreService.shared.shutdown(reason: "requested") }
-    }
-
-    /// Refreshing every app still goes through the Refresh All Apps intent inside Core.
-    @MainActor
-    private static func runLegacyRefresh(onEvent: @escaping ([String: Any]) -> Void) async throws -> [String: Any] {
-        let tracker = Progress(totalUnitCount: 100)
-        let observation = tracker.observe(\Progress.fractionCompleted, options: [.new]) { _, change in
-            if let value = change.newValue {
-                DispatchQueue.main.async { onEvent(["kind": "progress", "value": value]) }
-            }
-        }
-        defer { observation.invalidate() }
-        AnderCoreService.shared.progress = tracker
-        try await AnderCoreService.shared.performLegacyRefresh(identifier: "RefreshAllIntent",
-                                                               mangledName: "9SideStore20RefreshAllAppsIntentV")
-        return [:]
     }
 }

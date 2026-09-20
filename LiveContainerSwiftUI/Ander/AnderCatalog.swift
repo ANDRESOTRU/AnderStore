@@ -8,6 +8,15 @@
 
 import Foundation
 
+struct AnderUpdateCandidate: Identifiable {
+    let installedApp: LCAppModel
+    let storeApp: AltStoreSourceApp
+    let sourceURL: URL
+    let version: AltStoreSourceAppVersion
+
+    var id: String { installedApp.appInfo.relativeBundlePath ?? installedApp.bundleIdentifier }
+}
+
 enum AnderCatalog {
 
     static func installedApp(for storeBundleId: String, in apps: [LCAppModel]) -> LCAppModel? {
@@ -28,21 +37,53 @@ enum AnderCatalog {
         // a fallback for apps installed before AnderStore started recording it.
         let current: String? = installed.appInfo.anderStoreVersion ?? installed.appInfo.version()
         guard let current, !current.isEmpty else { return false }
-        return AnderPackageCheck.isVersion(latest, newerThan: current)
+        return isNewer(version: latest,
+                       build: app.latestVersion?.buildVersion,
+                       than: current,
+                       currentBuild: installed.appInfo.anderStoreBuildVersion ?? installed.appInfo.buildVersion())
     }
 
-    // Convenience for code that is not inside a view.
-
-    static var allApps: [LCAppModel] {
-        let model = DataManager.shared.model
-        return model.apps + model.hiddenApps
+    static func isNewer(version: String,
+                        build: String?,
+                        than currentVersion: String,
+                        currentBuild: String?) -> Bool {
+        AnderVersioning.isNewer(version: version,
+                                build: build,
+                                than: currentVersion,
+                                currentBuild: currentBuild)
     }
 
-    static func installedApp(for storeBundleId: String) -> LCAppModel? {
-        installedApp(for: storeBundleId, in: allApps)
-    }
-
-    static func hasUpdate(for app: AltStoreSourceApp) -> Bool {
-        hasUpdate(for: app, in: allApps)
+    /// Automatic updates intentionally require exact provenance. Bundle-ID fallback is useful
+    /// for painting a store row, but is unsafe when the user has multiple copies installed.
+    static func updateCandidates(from sources: [AnderCatalogStore.SourceItem],
+                                 apps: [LCAppModel]) -> [AnderUpdateCandidate] {
+        var candidates: [AnderUpdateCandidate] = []
+        for installed in apps {
+            guard let sourceString = installed.appInfo.anderSourceURL,
+                  let storeBundleID = installed.appInfo.anderStoreBundleId,
+                  let sourceItem = sources.first(where: { $0.url.absoluteString == sourceString }),
+                  let source = sourceItem.source,
+                  let storeApp = source.apps.first(where: {
+                      AnderProvenanceIdentity.matches(installedSourceURL: sourceString,
+                                                      installedBundleID: storeBundleID,
+                                                      sourceURL: sourceItem.url.absoluteString,
+                                                      bundleID: $0.bundleIdentifier)
+                  }),
+                  let latest = storeApp.latestVersion,
+                  let currentVersion = installed.appInfo.anderStoreVersion ?? installed.appInfo.version(),
+                  isNewer(version: latest.version,
+                          build: latest.buildVersion,
+                          than: currentVersion,
+                          currentBuild: installed.appInfo.anderStoreBuildVersion ?? installed.appInfo.buildVersion()) else {
+                continue
+            }
+            candidates.append(AnderUpdateCandidate(installedApp: installed,
+                                                    storeApp: storeApp,
+                                                    sourceURL: sourceItem.url,
+                                                    version: latest))
+        }
+        return candidates.sorted {
+            $0.storeApp.name.localizedStandardCompare($1.storeApp.name) == .orderedAscending
+        }
     }
 }
