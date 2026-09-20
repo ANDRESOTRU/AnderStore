@@ -85,7 +85,7 @@ final class AnderDeviceManagementModel: ObservableObject {
                    completion: @escaping (Data?, String?) -> Void) {
         run("certificates.exportP12",
             params: ["serialNumber": certificate.serialNumber, "password": password]) { payload in
-            let data = (payload?["data"] as? String).flatMap(Data.init(base64Encoded:))
+            let data = (payload?["data"] as? String).flatMap { Data(base64Encoded: $0) }
             completion(data, payload?["filename"] as? String)
         }
     }
