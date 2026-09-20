@@ -64,13 +64,13 @@ public final class AnderCoreService {
     }
 
     /// Bumped when the envelope itself changes shape. Core reports its own in `handshake`.
-    static let protocolVersion = 2
+    static let protocolVersion = 3
 
     /// Only these may be retried automatically after the connection dropped: everything else
     /// either talks to Apple or changes state, and a silent second attempt is how accounts get
     /// rate limited and certificates get burned.
     private static let retryableCommands: Set<String> = [
-        "handshake", "snapshot", "account.status", "cert.status", "device.status"
+        "handshake", "snapshot", "account.status", "cert.status", "certificates.active", "device.status"
     ]
 
     private struct Pending {

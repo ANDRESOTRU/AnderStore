@@ -100,7 +100,8 @@ final class SignInOperation: BaseStandaloneOperation<StandaloneOperationContext,
     }
     
     private func startAuthentication(reportProgress: @escaping @Sendable (Int64) -> Void) async throws -> SignInResult {
-        let (account, session) = if let silentResult = try await self.silentSignIn() {
+        let (account, session) = if self.signInHandler.allowsSilentAuthentication,
+                                    let silentResult = try await self.silentSignIn() {
             silentResult
         } else {
             try await self.authenticationLoop()
@@ -196,6 +197,9 @@ final class SignInOperation: BaseStandaloneOperation<StandaloneOperationContext,
                     case .cancel:
                         self.debugLog("[SignInOperation] User cancelled in provisioningLoop")
                         throw OperationError.cancelled
+                    case .fail:
+                        self.debugLog("[SignInOperation] Non-interactive provisioning failed; preserving original error")
+                        throw error
                 }
             }
         }
@@ -257,6 +261,9 @@ final class SignInOperation: BaseStandaloneOperation<StandaloneOperationContext,
             } catch {
                 self.debugLog("[SignInOperation] authenticationLoop: Attempt failed with error: \(error)")
                 await handler.handleSignInResult(.failure(error))
+                guard await handler.shouldRetryAuthentication(after: error) else {
+                    throw error
+                }
             }
         }
     }

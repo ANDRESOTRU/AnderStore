@@ -33933,6 +33933,41 @@
         }
       }
     },
+    "lc.certificateSync.action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Synchronize certificate" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Синхронизировать сертификат" } }
+      }
+    },
+    "lc.certificateSync.syncing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Synchronizing certificate…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Синхронизация сертификата…" } }
+      }
+    },
+    "lc.certificateSync.updated" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The certificate has been updated." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сертификат обновлён." } }
+      }
+    },
+    "lc.certificateSync.current" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The certificate is already up to date." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сертификат уже актуален." } }
+      }
+    },
+    "lc.certificateSync.notFound" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "AnderStore Core has no active certificate. Sign in to Apple ID or import a certificate." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В AnderStore Core нет активного сертификата. Войдите в Apple ID или импортируйте сертификат." } }
+      }
+    },
     "lc.account.errorTooMany" : {
       "extractionState" : "manual",
       "localizations" : {

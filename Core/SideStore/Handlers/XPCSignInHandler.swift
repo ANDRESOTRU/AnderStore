@@ -11,6 +11,8 @@ import SideSign
 
 final class XPCSignInHandler: SignInHandler, AnisetteServerHandler, @unchecked Sendable {
 
+    let allowsSilentAuthentication = false
+
     private let appleID: String
     private let password: String
     private let codeRequester: (String) -> Void
@@ -73,6 +75,12 @@ final class XPCSignInHandler: SignInHandler, AnisetteServerHandler, @unchecked S
 
     func handleSignInResult(_ result: Result<(ALTAccount, ALTAppleAPISession), Error>) async {}
 
+    func shouldRetryAuthentication(after error: Error) async -> Bool {
+        // The AnderStore screen owns retries. Reusing the same credentials here can turn one
+        // tap into many requests and trigger Apple's 429 rate limit.
+        false
+    }
+
     func resolveTeam(_ teams: [ALTTeam]) async throws -> ALTTeam {
         if let free = teams.first(where: { $0.type == .free }) {
             return free
@@ -84,7 +92,7 @@ final class XPCSignInHandler: SignInHandler, AnisetteServerHandler, @unchecked S
     }
 
     func resolveProvisioningError(_ error: Error) async -> ProvisioningErrorDecision {
-        .cancel
+        .fail
     }
 
     func resolvePostAuth() async {}

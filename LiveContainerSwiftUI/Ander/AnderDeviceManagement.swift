@@ -65,6 +65,16 @@ final class AnderDeviceManagementModel: ObservableObject {
 
     func revoke(_ certificate: AnderCertificateInfo) {
         run("certificates.revoke", params: ["serialNumber": certificate.serialNumber]) { [weak self] _ in
+            if certificate.isActive {
+                let defaults = LCUtils.appGroupUserDefault
+                defaults.removeObject(forKey: "LCCertificateData")
+                defaults.removeObject(forKey: "LCCertificatePassword")
+                defaults.removeObject(forKey: "LCCertificateUpdateDate")
+                defaults.removeObject(forKey: "anderCertificateSerial")
+                defaults.removeObject(forKey: "anderCertificateSHA256")
+                defaults.removeObject(forKey: "anderLastCertificateSync")
+                AnderState.shared.certificateDidChange()
+            }
             self?.loadCertificates()
             AnderState.shared.invalidate()
         }
@@ -74,9 +84,9 @@ final class AnderDeviceManagementModel: ObservableObject {
         var params: [String: Any] = ["data": data.base64EncodedString()]
         if !password.isEmpty { params["password"] = password }
         run("certificates.importP12", params: params) { [weak self] _ in
-            _ = AnderAccountAPI.importCertificateFromCore()
-            self?.loadCertificates()
-            AnderState.shared.certificateDidChange()
+            AnderState.shared.synchronizeCertificate(force: true) { _ in
+                self?.loadCertificates()
+            }
         }
     }
 

@@ -52,6 +52,29 @@ enum AnderFileIntegrity {
     }
 }
 
+enum AnderCertificateSyncPolicy {
+    static let interval: TimeInterval = 6 * 3600
+
+    static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func shouldSynchronize(force: Bool,
+                                  localCertificatePresent: Bool,
+                                  localCertificateValid: Bool,
+                                  lastSync: TimeInterval,
+                                  now: TimeInterval) -> Bool {
+        force || !localCertificatePresent || !localCertificateValid || now - lastSync >= interval
+    }
+
+    static func hasChanged(oldSerial: String?,
+                           oldDigest: String?,
+                           newSerial: String,
+                           newDigest: String) -> Bool {
+        oldSerial != newSerial || oldDigest != newDigest
+    }
+}
+
 /// A narrow filesystem transaction used when replacing an installed app bundle.
 /// Call `commit()` after model updates; otherwise `rollback()` restores the previous bundle.
 final class AnderBundleSwap {

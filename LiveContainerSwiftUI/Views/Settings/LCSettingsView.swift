@@ -39,9 +39,9 @@ struct LCSettingsView: View {
     @State var successInfo = ""
 
     @State private var certificateDataFound = false
+    @ObservedObject private var anderState = AnderState.shared
     
     @StateObject private var certificateImportAlert = YesNoHelper()
-    @StateObject private var certificateImportFromBuiltInSideStoreAlert = YesNoHelper()
     @StateObject private var certificateRemoveAlert = YesNoHelper()
     @StateObject private var certificateImportFileAlert = AlertHelper<URL>()
     @StateObject private var certificateImportPasswordAlert = InputHelper()
@@ -101,12 +101,17 @@ struct LCSettingsView: View {
                             Button {
                                 Task{ await importCertificateFromSideStore() }
                             } label: {
-                                if certificateDataFound {
+                                if store == .SideStore {
+                                    Text(anderState.certificateSyncState == .syncing
+                                         ? "lc.certificateSync.syncing".loc
+                                         : "lc.certificateSync.action".loc)
+                                } else if certificateDataFound {
                                     Text("lc.settings.refreshCertificateFromStore %@".localizeWithFormat(storeName))
                                 } else {
                                     Text("lc.settings.importCertificateFromStore %@".localizeWithFormat(storeName))
                                 }
                             }
+                            .disabled(anderState.certificateSyncState == .syncing)
                         }
                         
                         NavigationLink {
@@ -404,18 +409,6 @@ struct LCSettingsView: View {
             } message: {
                 Text("lc.settings.removeCertificateDesc".loc)
             }
-            .alert("lc.settings.importCertFromBuiltinSideStore".loc, isPresented: $certificateImportFromBuiltInSideStoreAlert.show) {
-                Button {
-                    certificateImportFromBuiltInSideStoreAlert.close(result: true)
-                } label: {
-                    Text("lc.common.ok".loc)
-                }
-                Button("lc.common.cancel".loc, role: .cancel) {
-                    certificateImportFromBuiltInSideStoreAlert.close(result: false)
-                }
-            } message: {
-                Text("lc.settings.importCertFromBuiltinSideStoreDesc".loc)
-            }
             .betterFileImporter(isPresented: $certificateImportFileAlert.show, types: [.p12], multiple: false, callback: { fileUrls in
                 certificateImportFileAlert.close(result: fileUrls[0])
             }, onDismiss: {
@@ -566,68 +559,32 @@ struct LCSettingsView: View {
             return
         }
 
-        LCUtils.appGroupUserDefault.set(certificateData, forKey: "LCCertificateData")
-        LCUtils.appGroupUserDefault.set(certificatePassword, forKey: "LCCertificatePassword")
-        LCUtils.appGroupUserDefault.set(NSDate.now, forKey: "LCCertificateUpdateDate")
-        certificateDataFound = true
-
-        UserDefaults.standard.set(LCSharedUtils.appGroupID(), forKey: "LCAppGroupID")
+        importCertificateIntoCore(certificateData, password: certificatePassword)
     }
     
     func importCertificateFromSideStore() async {
-        if UserDefaults.sideStoreExist() {
-            if let ans = await certificateImportFromBuiltInSideStoreAlert.open(), ans {
-                let query: [String: Any] = [
-                    kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrAccount as String: "signingCertificate",
-                    kSecReturnData as String: true,
-                    kSecMatchLimit as String: kSecMatchLimitOne,
-                    kSecAttrService as String: "com.kdt.livecontainer",
-                    kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
-                ]
-                
-                var item: CFTypeRef?
-                let status = SecItemCopyMatching(query as CFDictionary, &item)
-                
-                guard status == errSecSuccess else {
-                    if status == errSecItemNotFound {
-                        errorInfo = "lc.settings.importCertFromBuiltinSideStore.certNotFounndErr".loc
-                        errorShow = true
-                    } else {
-                        errorInfo = "Keychain read error: \(status)"
-                        errorShow = true
-                    }
-                    return
-                }
-                
-                guard let data = item as? Data else {
-                    errorInfo = "Failed to decode certificate data"
+        if store == .SideStore || UserDefaults.sideStoreExist() {
+            AnderState.shared.synchronizeCertificate(force: true) { syncState in
+                switch syncState {
+                case .updated:
+                    certificateDataFound = true
+                    successInfo = "lc.certificateSync.updated".loc
+                    successShow = true
+                case .current:
+                    certificateDataFound = true
+                    successInfo = "lc.certificateSync.current".loc
+                    successShow = true
+                case .missing:
+                    errorInfo = "lc.certificateSync.notFound".loc
                     errorShow = true
-                    return
+                case .failed(let message):
+                    errorInfo = message
+                    errorShow = true
+                case .idle, .syncing:
+                    break
                 }
-                
-                let passwordQuery: [String: Any] = [
-                    kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrAccount as String: "signingCertificatePassword",
-                    kSecReturnData as String: true,
-                    kSecMatchLimit as String: kSecMatchLimitOne,
-                    kSecAttrService as String: "com.kdt.livecontainer",
-                    kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
-                ]
-                
-                var passwordItem: CFTypeRef?
-                let passwordStatus = SecItemCopyMatching(passwordQuery as CFDictionary, &passwordItem)
-                var password = ""
-                if passwordStatus == errSecSuccess,
-                   let passwordData = passwordItem as? Data,
-                   let pwd = String(data: passwordData, encoding: .utf8) {
-                    password = pwd
-                }
-                
-                onSideStoreCertificateCallback(certificateData: data, password: password)
-                
-                return
             }
+            return
         }
         
         let storeScheme : String
@@ -645,10 +602,41 @@ struct LCSettingsView: View {
         await UIApplication.shared.open(url)
     }
     func onSideStoreCertificateCallback(certificateData: Data, password: String) {
-        LCUtils.appGroupUserDefault.set(certificateData, forKey: "LCCertificateData")
-        LCUtils.appGroupUserDefault.set(password, forKey: "LCCertificatePassword")
-        LCUtils.appGroupUserDefault.set(NSDate.now, forKey: "LCCertificateUpdateDate")
-        certificateDataFound = true
+        importCertificateIntoCore(certificateData, password: password)
+    }
+
+    private func importCertificateIntoCore(_ certificateData: Data, password: String) {
+        var params: [String: Any] = ["data": certificateData.base64EncodedString()]
+        if !password.isEmpty { params["password"] = password }
+        let started = AnderAccountAPI.perform("certificates.importP12", params: params) { _, failure in
+            if let failure {
+                errorInfo = AnderAccountAPI.friendly(failure)
+                errorShow = true
+                return
+            }
+            AnderState.shared.synchronizeCertificate(force: true) { syncState in
+                switch syncState {
+                case .updated, .current:
+                    certificateDataFound = true
+                    UserDefaults.standard.set(LCSharedUtils.appGroupID(), forKey: "LCAppGroupID")
+                    successInfo = syncState == .updated
+                        ? "lc.certificateSync.updated".loc : "lc.certificateSync.current".loc
+                    successShow = true
+                case .missing:
+                    errorInfo = "lc.certificateSync.notFound".loc
+                    errorShow = true
+                case .failed(let message):
+                    errorInfo = message
+                    errorShow = true
+                case .idle, .syncing:
+                    break
+                }
+            }
+        }
+        if !started {
+            errorInfo = "lc.account.errorNoExtension".loc
+            errorShow = true
+        }
     }
     
     func removeCertificate() async {
@@ -659,9 +647,13 @@ struct LCSettingsView: View {
         LCUtils.appGroupUserDefault.set(nil, forKey: "LCCertificateData")
         LCUtils.appGroupUserDefault.set(nil, forKey: "LCCertificatePassword")
         LCUtils.appGroupUserDefault.set(nil, forKey: "LCCertificateUpdateDate")
+        LCUtils.appGroupUserDefault.removeObject(forKey: "anderCertificateSerial")
+        LCUtils.appGroupUserDefault.removeObject(forKey: "anderCertificateSHA256")
+        LCUtils.appGroupUserDefault.removeObject(forKey: "anderLastCertificateSync")
         certificateDataFound = false
 
         UserDefaults.standard.set(nil, forKey: "LCAppGroupID")
+        AnderState.shared.certificateDidChange()
     }
     
     func nukeSideStore() async {

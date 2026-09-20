@@ -693,7 +693,7 @@ public extension StoreApp
         let placeholderChannel = ReleaseTrackType.stable.description
         
         let app = StoreApp(context: context)
-        app.name = "SideStore"
+        app.name = "AnderStore"
         app.bundleIdentifier = placeholderBundleId
         app.developerName = "Side Team"
         app.localizedDescription = "AnderStore is an alternative App Store."

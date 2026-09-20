@@ -344,7 +344,7 @@ struct UserCustomizationsView: View {
                                     .foregroundColor(.white)
                                     .multilineTextAlignment(.leading)
                                     .fixedSize(horizontal: false, vertical: true)
-                                Text("Exports SideStore.conf to import into WireGuard VPN app")
+                                Text("Exports AnderStore.conf to import into WireGuard VPN app")
                                     .font(.system(size: 12, weight: .regular))
                                     .foregroundColor(Color.white.opacity(0.6))
                                     .multilineTextAlignment(.leading)
@@ -524,7 +524,7 @@ struct UserCustomizationsView: View {
         let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
         top.present(activityVC, animated: true)
         #else
-        TVWebFileTransferManager.shared.startExport(fileURL: url, title: "Export SideStore.conf", presentingVC: top)
+        TVWebFileTransferManager.shared.startExport(fileURL: url, title: "Export AnderStore.conf", presentingVC: top)
         #endif
     }
 

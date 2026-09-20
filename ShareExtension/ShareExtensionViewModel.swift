@@ -306,14 +306,14 @@ final class ShareExtensionViewModel: ObservableObject {
         let container = ShareContainer(
             id: "builtinSideStore",
             folderName: "builtinSideStore",
-            name: "SideStore",
+            name: "AnderStore",
             isShared: false,
         )
 
         return ShareApp(
             id: "builtinSideStore",
             relativeBundlePath: "builtinSideStore",
-            displayName: "SideStore",
+            displayName: "AnderStore",
             bundleIdentifier: "builtinSideStore",
             isShared: false,
             isHidden: false,

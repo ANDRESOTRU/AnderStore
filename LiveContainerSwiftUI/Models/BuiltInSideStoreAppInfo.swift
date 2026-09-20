@@ -11,6 +11,10 @@ final class BuiltInSideStoreAppInfo : LCAppInfo {
     private override init() {
         super.init(bundlePath: Bundle.main.bundleURL.appendingPathComponent("Frameworks/SideStoreApp.framework").path)
     }
+
+    override func displayName() -> String! {
+        "AnderStore"
+    }
     
     override func iconIsDarkIcon(_ isDarkIcon: Bool) -> UIImage! {
         if isDarkIcon {

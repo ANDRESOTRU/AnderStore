@@ -23,7 +23,7 @@ final class LaunchViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         debugLog("[LaunchViewController] viewDidLoad()")
-        splashView = SplashView(frame: view.bounds, appName: "SideStore")
+        splashView = SplashView(frame: view.bounds, appName: "AnderStore")
         destinationViewController = storyboard!.instantiateViewController(withIdentifier: "tabBarController") as? TabBarController
         view.addSubview(splashView)
     }

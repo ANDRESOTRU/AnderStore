@@ -8,7 +8,6 @@
 import Foundation
 import SwiftUI
 import UserNotifications
-import Security
 
 struct LCTabView: View {
     @State var errorShow = false
@@ -445,7 +444,7 @@ enum AnderSignature {
 // commands exist: SideStoreSupport is loaded with dlopen and is not linked to this module.
 
 /// A failure reported by Core. `kind` is stable; the message is only for the log.
-struct AnderCoreFailure {
+struct AnderCoreFailure: Error {
     let kind: String
     let message: String
 
@@ -460,6 +459,11 @@ struct AnderCoreFailure {
     }
 
     static let unavailable = AnderCoreFailure(kind: "coreUnavailable", message: "")
+}
+
+enum AnderCertificateSyncResult: Equatable {
+    case updated
+    case unchanged
 }
 
 enum AnderAccountAPI {
@@ -569,28 +573,55 @@ enum AnderAccountAPI {
                 completion: { _, failure in completion(failure) })
     }
 
-    /// Copies the signing certificate created by Core into AnderStore (same as "Import Certificate from AnderStore").
+    /// Copies the active Core certificate through the command channel. Core runs with a
+    /// different default Keychain access group, so the host must not query its items directly.
     @discardableResult
-    static func importCertificateFromCore() -> Bool {
-        func keychainData(_ account: String) -> Data? {
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrAccount as String: account,
-                kSecReturnData as String: true,
-                kSecMatchLimit as String: kSecMatchLimitOne,
-                kSecAttrService as String: "com.kdt.livecontainer",
-                kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
-            ]
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else { return nil }
-            return item as? Data
+    static func synchronizeCertificateFromCore(
+        completion: @escaping (AnderCertificateSyncResult?, AnderCoreFailure?) -> Void
+    ) -> Bool {
+        perform("certificates.active") { response, failure in
+            if let failure {
+                completion(nil, failure)
+                return
+            }
+            guard let encoded = response?["data"] as? String,
+                  let certificate = Data(base64Encoded: encoded),
+                  let password = response?["password"] as? String,
+                  let serialNumber = response?["serialNumber"] as? String,
+                  !serialNumber.isEmpty else {
+                completion(nil, AnderCoreFailure(kind: "invalidCertificate",
+                                                 message: "Core returned an invalid certificate payload"))
+                return
+            }
+
+            // Validate first. Never replace the last working certificate with a corrupt P12.
+            guard LCUtils.getCertTeamId(withKeyData: certificate, password: password) != nil else {
+                completion(nil, AnderCoreFailure(kind: "invalidCertificate",
+                                                 message: "The active Core certificate could not be decoded"))
+                return
+            }
+
+            let digest = AnderCertificateSyncPolicy.digest(certificate)
+            let defaults = LCUtils.appGroupUserDefault
+            let oldData = LCUtils.certificateData()
+            let oldDigest = oldData.map(AnderCertificateSyncPolicy.digest)
+            let changed = AnderCertificateSyncPolicy.hasChanged(
+                oldSerial: defaults.string(forKey: "anderCertificateSerial"),
+                oldDigest: oldDigest,
+                newSerial: serialNumber,
+                newDigest: digest
+            )
+
+            if changed {
+                defaults.set(certificate, forKey: "LCCertificateData")
+                defaults.set(password, forKey: "LCCertificatePassword")
+                defaults.set(NSDate.now, forKey: "LCCertificateUpdateDate")
+            }
+            defaults.set(serialNumber, forKey: "anderCertificateSerial")
+            defaults.set(digest, forKey: "anderCertificateSHA256")
+            defaults.set(Date().timeIntervalSince1970, forKey: "anderLastCertificateSync")
+            completion(changed ? .updated : .unchanged, nil)
         }
-        guard let certificate = keychainData("signingCertificate") else { return false }
-        let password = keychainData("signingCertificatePassword").flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        LCUtils.appGroupUserDefault.set(certificate, forKey: "LCCertificateData")
-        LCUtils.appGroupUserDefault.set(password, forKey: "LCCertificatePassword")
-        LCUtils.appGroupUserDefault.set(NSDate.now, forKey: "LCCertificateUpdateDate")
-        return true
     }
 
     /// Turns a failure from Core into a short hint. The `kind` decides — the wording of the
@@ -605,6 +636,10 @@ enum AnderAccountAPI {
             return "lc.account.errorRevoked".loc
         case "certificateLimit", "appIDLimit", "certificateExpired":
             return "lc.account.errorCertLimit".loc
+        case "certificateNotFound":
+            return "lc.certificateSync.notFound".loc
+        case "invalidCertificate":
+            return "lc.settings.invalidCertError".loc
         case "needsAuth":
             return "lc.account.errorPassword".loc
         case "noVPN", "needsMinimuxer", "noConnection", "needsPairing", "noDevice", "timedOut":
@@ -664,7 +699,6 @@ struct AnderAccountView: View {
 
     @ObservedObject private var state = AnderState.shared
     @State private var expiration: Date? = nil
-    @State private var certificateReady = false
     @State private var coreAvailable = true
     @State private var phase: Phase = .idle
     @State private var email = ""
@@ -882,18 +916,14 @@ struct AnderAccountView: View {
 
     private func reload() {
         AnderUpdateChecker.checkIfNeeded()
-        certificateReady = LCSharedUtils.certificatePassword() != nil
         expiration = AnderSignature.expirationDate()
         coreAvailable = AnderAccountAPI.isAvailable
         if let expiration {
             AnderSignature.scheduleReminders(expiration: expiration)
         }
         // Paints from the cached snapshot; only goes to Core when that snapshot is old.
-        state.refresh()
-        state.refreshDeviceStatus()
-        state.validateLocalSetup()
-        state.autoRenewIfNeeded()
-        // Core is started only by the Sign in / Refresh buttons, never on opening the tab
+        state.handleForeground()
+        // The foreground coordinator may start Core for a local, network-free certificate sync.
     }
 
     // MARK: Actions
@@ -932,8 +962,10 @@ struct AnderAccountView: View {
             signInBlockedUntil = 0
             savedAppleID = account ?? appleID
             showSignInForm = false
-            certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
-            state.certificateDidChange()
+            state.synchronizeCertificate(force: true) { syncState in
+                if case .failed(let detail) = syncState { message = detail }
+                if case .missing = syncState { message = "lc.certificateSync.notFound".loc }
+            }
         })
         if !started {
             phase = .idle
@@ -961,9 +993,21 @@ struct AnderAccountView: View {
             if let failure {
                 message = AnderAccountAPI.friendly(failure)
             } else {
-                certificateReady = AnderAccountAPI.importCertificateFromCore() || certificateReady
                 expiration = AnderSignature.expirationDate()
-                state.certificateDidChange()
+                state.synchronizeCertificate(force: true) { syncState in
+                    switch syncState {
+                    case .updated:
+                        message = "lc.certificateSync.updated".loc
+                    case .current:
+                        message = "lc.certificateSync.current".loc
+                    case .missing:
+                        message = "lc.certificateSync.notFound".loc
+                    case .failed(let detail):
+                        message = detail
+                    case .idle, .syncing:
+                        break
+                    }
+                }
             }
         })
         if !started {
@@ -1018,6 +1062,7 @@ struct AnderAccountView: View {
             Text("lc.account.refreshHint".loc)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            certificateSyncStatus
             if case .refreshing(let value) = phase {
                 VStack(alignment: .leading, spacing: 6) {
                     ProgressView(value: value)
@@ -1041,6 +1086,29 @@ struct AnderAccountView: View {
             renewalStatus
         }
         .anderCard()
+    }
+
+    @ViewBuilder
+    private var certificateSyncStatus: some View {
+        switch state.certificateSyncState {
+        case .idle:
+            EmptyView()
+        case .syncing:
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("lc.certificateSync.syncing".loc)
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        case .updated:
+            Text("lc.certificateSync.updated".loc).font(.footnote).foregroundStyle(.green)
+        case .current:
+            Text("lc.certificateSync.current".loc).font(.footnote).foregroundStyle(.secondary)
+        case .missing:
+            Text("lc.certificateSync.notFound".loc).font(.footnote).foregroundStyle(.orange)
+        case .failed(let detail):
+            Text(detail).font(.footnote).foregroundStyle(.red)
+        }
     }
 
     @ViewBuilder

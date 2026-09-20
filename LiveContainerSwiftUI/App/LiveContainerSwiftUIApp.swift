@@ -110,8 +110,7 @@ struct LiveContainerSwiftUIApp : SwiftUI.App {
                 .environmentObject(LCAppSortManager.shared)
                 .onChange(of: scenePhase) { phase in
                     guard phase == .active else { return }
-                    AnderState.shared.refresh()
-                    AnderState.shared.autoRenewIfNeeded()
+                    AnderState.shared.handleForeground()
                 }
         }
         

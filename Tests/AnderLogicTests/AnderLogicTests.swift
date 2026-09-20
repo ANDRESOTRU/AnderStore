@@ -32,6 +32,42 @@ final class AnderLogicTests: XCTestCase {
                        "85904ab99a53458bc7548d1b8842fc78d4f72c9fd2e850ccd0623f7df673ef86")
     }
 
+    func testCertificateSyncPolicy() {
+        let data = Data("certificate".utf8)
+        let digest = AnderCertificateSyncPolicy.digest(data)
+        XCTAssertEqual(digest.count, 64)
+        XCTAssertFalse(AnderCertificateSyncPolicy.hasChanged(oldSerial: "123",
+                                                              oldDigest: digest,
+                                                              newSerial: "123",
+                                                              newDigest: digest))
+        XCTAssertTrue(AnderCertificateSyncPolicy.hasChanged(oldSerial: "old",
+                                                             oldDigest: digest,
+                                                             newSerial: "new",
+                                                             newDigest: digest))
+
+        let now: TimeInterval = 100_000
+        XCTAssertFalse(AnderCertificateSyncPolicy.shouldSynchronize(force: false,
+                                                                     localCertificatePresent: true,
+                                                                     localCertificateValid: true,
+                                                                     lastSync: now - 60,
+                                                                     now: now))
+        XCTAssertTrue(AnderCertificateSyncPolicy.shouldSynchronize(force: false,
+                                                                    localCertificatePresent: false,
+                                                                    localCertificateValid: true,
+                                                                    lastSync: now - 60,
+                                                                    now: now))
+        XCTAssertTrue(AnderCertificateSyncPolicy.shouldSynchronize(force: false,
+                                                                    localCertificatePresent: true,
+                                                                    localCertificateValid: false,
+                                                                    lastSync: now - 60,
+                                                                    now: now))
+        XCTAssertTrue(AnderCertificateSyncPolicy.shouldSynchronize(force: true,
+                                                                    localCertificatePresent: true,
+                                                                    localCertificateValid: true,
+                                                                    lastSync: now,
+                                                                    now: now))
+    }
+
     func testCatalogAndUpdatesDecoding() throws {
         let catalog = #"{"name":"Test","apps":[{"name":"App","bundleIdentifier":"test.app","versions":[{"version":"2.0","buildNumber":"20","downloadURL":"app.ipa","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","minOSVersion":"16.0"}]}]}"#
         let source = try JSONDecoder().decode(AltStoreSourceResponse.self, from: Data(catalog.utf8))

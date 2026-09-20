@@ -16,6 +16,8 @@ protocol AnisetteServerHandler: AnyObject {
 enum ProvisioningErrorDecision {
     case retry
     case cancel
+    /// Stop a non-interactive flow and preserve the underlying portal error.
+    case fail
 }
 
 enum RevokeDecision {
@@ -24,10 +26,12 @@ enum RevokeDecision {
 }
 
 protocol SignInHandler: AnyObject {
+    var allowsSilentAuthentication: Bool { get }
     func credentials() async throws -> (String, String)
     func verificationCode(for request: TwoFactorRequest) async throws -> TwoFactorResponse
     func accountRepair(url: URL, message: String) async -> AccountRepairDecision
     func handleSignInResult(_ result: Result<(ALTAccount, ALTAppleAPISession), Error>) async
+    func shouldRetryAuthentication(after error: Error) async -> Bool
     
     func resolveTeam(_ teams: [ALTTeam]) async throws -> ALTTeam
     func resolveProvisioningError(_ error: Error) async -> ProvisioningErrorDecision
@@ -37,5 +41,13 @@ protocol SignInHandler: AnyObject {
     func resolveResign(mismatchReason: CodeSignValidationReason, context: StandaloneOperationContext) async throws -> Bool
     
     func complete() async
+}
+
+extension SignInHandler {
+    var allowsSilentAuthentication: Bool { true }
+
+    /// Interactive handlers can ask for corrected credentials and retry. Headless handlers
+    /// override this so one button press never hammers Apple's authentication endpoint.
+    func shouldRetryAuthentication(after error: Error) async -> Bool { true }
 }
 

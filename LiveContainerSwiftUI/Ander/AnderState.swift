@@ -49,6 +49,15 @@ enum AnderRenewalState: Equatable {
     case complete
 }
 
+enum AnderCertificateSyncState: Equatable {
+    case idle
+    case syncing
+    case updated
+    case current
+    case missing
+    case failed(String)
+}
+
 /// Used from the interface only, like SharedModel: every method runs on the main thread.
 final class AnderState: ObservableObject {
 
@@ -69,6 +78,7 @@ final class AnderState: ObservableObject {
     @Published private(set) var jitLessReady = false
     @Published private(set) var certificateValid = false
     @Published private(set) var renewalState: AnderRenewalState = .idle
+    @Published private(set) var certificateSyncState: AnderCertificateSyncState = .idle
     @Published private(set) var resignSummary: String?
 
     /// Expiration of AnderStore's own signature, read from the provisioning profile.
@@ -125,6 +135,68 @@ final class AnderState: ObservableObject {
         certificatePresent = LCSharedUtils.certificatePassword() != nil
         validateLocalSetup(resignAfterSuccess: true)
         invalidate()
+    }
+
+    /// Pulls the active P12 from Core and installs it for Live Apps. This is the only path used
+    /// by automatic and manual Core-to-host certificate synchronization.
+    func synchronizeCertificate(force: Bool = false,
+                                resignAfterChange: Bool = true,
+                                completion: ((AnderCertificateSyncState) -> Void)? = nil) {
+        guard coreAvailable else {
+            certificateSyncState = .failed("lc.account.errorNoExtension".loc)
+            completion?(certificateSyncState)
+            return
+        }
+        guard certificateSyncState != .syncing else { return }
+
+        let defaults = LCUtils.appGroupUserDefault
+        let lastSync = defaults.double(forKey: "anderLastCertificateSync")
+        let localCertificatePresent = LCUtils.certificateData() != nil && LCSharedUtils.certificatePassword() != nil
+        if !AnderCertificateSyncPolicy.shouldSynchronize(
+            force: force,
+            localCertificatePresent: localCertificatePresent,
+            localCertificateValid: certificateValid,
+            lastSync: lastSync,
+            now: Date().timeIntervalSince1970
+        ) {
+            certificateSyncState = .current
+            completion?(certificateSyncState)
+            return
+        }
+
+        certificateSyncState = .syncing
+        let started = AnderAccountAPI.synchronizeCertificateFromCore { [weak self] result, failure in
+            guard let self else { return }
+            if let failure {
+                self.certificateSyncState = failure.kind == "certificateNotFound"
+                    ? .missing : .failed(AnderAccountAPI.friendly(failure))
+                self.evaluateReadiness()
+                completion?(self.certificateSyncState)
+                return
+            }
+
+            let changed = result == .updated
+            self.certificatePresent = true
+            self.certificateSyncState = changed ? .updated : .current
+            self.signatureExpiration = AnderSignature.expirationDate()
+            self.validateLocalSetup(resignAfterSuccess: changed && resignAfterChange)
+            self.capturedAt = nil
+            self.refresh(force: true)
+            completion?(self.certificateSyncState)
+        }
+        if !started {
+            certificateSyncState = .failed("lc.account.errorNoExtension".loc)
+            completion?(certificateSyncState)
+        }
+    }
+
+    func handleForeground() {
+        refresh()
+        refreshDeviceStatus()
+        validateLocalSetup()
+        synchronizeCertificate { [weak self] _ in
+            self?.autoRenewIfNeeded()
+        }
     }
 
     func refreshDeviceStatus() {
@@ -187,10 +259,21 @@ final class AnderState: ObservableObject {
                     ? .needsVPN : .failed(AnderAccountAPI.friendly(failure))
                 return
             }
-            _ = AnderAccountAPI.importCertificateFromCore()
-            self.signatureExpiration = AnderSignature.expirationDate()
-            self.renewalState = .complete
-            self.invalidate()
+            self.synchronizeCertificate(force: true) { [weak self] syncState in
+                guard let self else { return }
+                switch syncState {
+                case .updated, .current:
+                    self.signatureExpiration = AnderSignature.expirationDate()
+                    self.renewalState = .complete
+                    self.invalidate()
+                case .missing:
+                    self.renewalState = .failed("lc.certificateSync.notFound".loc)
+                case .failed(let message):
+                    self.renewalState = .failed(message)
+                case .idle, .syncing:
+                    break
+                }
+            }
         })
         if !started {
             renewalState = .failed("lc.account.errorNoExtension".loc)

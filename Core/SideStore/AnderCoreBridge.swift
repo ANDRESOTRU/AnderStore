@@ -16,7 +16,7 @@ import SideSign
 final class AnderCoreBridge: NSObject {
 
     /// Bumped together with AnderCoreService.protocolVersion when the envelope changes shape.
-    private static let protocolVersion = 2
+    private static let protocolVersion = 3
 
     private static let commands: [String] = [
         "handshake",
@@ -28,6 +28,7 @@ final class AnderCoreBridge: NSObject {
         "self.update",
         "apps.refresh",
         "certificates.list",
+        "certificates.active",
         "certificates.revoke",
         "certificates.importP12",
         "certificates.exportP12",
@@ -88,6 +89,9 @@ final class AnderCoreBridge: NSObject {
 
         case "certificates.list":
             listCertificates(completion: completion)
+
+        case "certificates.active":
+            activeCertificate(completion: completion)
 
         case "certificates.revoke":
             guard let serialNumber = request["serialNumber"] as? String else {
@@ -384,6 +388,23 @@ final class AnderCoreBridge: NSObject {
         }
     }
 
+    /// Exports the active certificate to the AnderStore host through the existing in-memory
+    /// command channel. The host cannot read the Core process' default Keychain access group.
+    private static func activeCertificate(completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        guard let active = CertificateManager.shared.activeCertificate else {
+            completion(nil, [
+                "kind": "certificateNotFound",
+                "message": "No active signing certificate is available in AnderStore Core"
+            ])
+            return
+        }
+        completion([
+            "data": active.p12Data.base64EncodedString(),
+            "password": active.password ?? "",
+            "serialNumber": active.serialNumber
+        ], nil)
+    }
+
     private static func revokeCertificate(serialNumber: String,
                                           completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
         Task {
@@ -394,6 +415,9 @@ final class AnderCoreBridge: NSObject {
                     return
                 }
                 _ = try await DeveloperPortalProxy.shared.revokeCertificate(certificate)
+                if CertificateManager.shared.activeCertificate?.serialNumber == serialNumber {
+                    CertificateManager.shared.clearActiveCertificate()
+                }
                 completion(["revoked": true], nil)
             } catch {
                 completion(nil, errorPayload(error))
@@ -552,11 +576,20 @@ final class AnderCoreBridge: NSObject {
         }
 
         if kind == "unknown" {
-            let text = error.localizedDescription.lowercased()
+            let nsError = error as NSError
+            let diagnosticParts = [
+                error.localizedDescription,
+                String(reflecting: error),
+                nsError.userInfo[NSUnderlyingErrorKey].map { String(describing: $0) } ?? "",
+                nsError.userInfo[NSDebugDescriptionErrorKey].map { String(describing: $0) } ?? ""
+            ]
+            let text = diagnosticParts.joined(separator: " ").lowercased()
             if text.contains("too many requests") || text.contains("429") {
                 kind = "rateLimited"
             } else if text.contains("cancel") {
                 kind = "cancelled"
+            } else if text.contains("incorrect") || text.contains("invalid password") || text.contains("-22406") {
+                kind = "needsAuth"
             } else if text.contains("certificate") && (text.contains("limit") || text.contains("maximum")) {
                 kind = "certificateLimit"
             }
