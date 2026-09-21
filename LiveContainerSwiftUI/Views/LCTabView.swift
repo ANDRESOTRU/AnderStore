@@ -630,7 +630,7 @@ enum AnderAccountAPI {
 
     static func refreshAsync(progress: @escaping (Double) -> Void,
                              onStarted: @escaping () -> Void = {}) async throws {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let started = refresh(progress: progress) { failure in
                 if let failure {
                     continuation.resume(throwing: failure)
