@@ -334,6 +334,8 @@ enum AnderTheme {
 
 // MARK: - AnderStore self-update check (server manifest with stable GitHub fallback)
 enum AnderUpdateChecker {
+    /// Stable catalog identity. The installed bundle ID may be rewritten during signing.
+    static let bundleIdentifier = "com.kdt.livecontainer"
     static let updatesURL = URL(string: "https://store.andresot.uk/updates.json")!
     static let githubLatestURL = URL(string: "https://api.github.com/repos/ANDRESOTRU/AnderStore/releases/latest")!
 
