@@ -355,36 +355,33 @@ enum AnderUpdateChecker {
         return false
     }
 
-    /// Fetches the newest stable version. Redirects, HTML and incomplete server manifests fall
-    /// back to GitHub's latest stable release. Both sources must provide a valid SHA-256.
+    /// Fetches both sources and chooses the newest valid stable version. A stale but otherwise
+    /// valid server manifest must never hide a newer GitHub release.
     static func fetchLatest(completion: @escaping (_ version: String?, _ notes: String?) -> Void) {
-        fetch(updatesURL) { data in
-            if let data, let update = AnderLatestUpdateParser.updatesManifest(data) {
-                DispatchQueue.main.async { completion(update.version, update.notes) }
-                return
-            }
-            fetch(githubLatestURL) { data in
-                let update = data.flatMap(AnderLatestUpdateParser.githubRelease)
-                DispatchQueue.main.async { completion(update?.version, update?.notes) }
+        Task {
+            async let serverData = fetch(updatesURL)
+            async let githubData = fetch(githubLatestURL)
+            let (serverResult, githubResult) = await (serverData, githubData)
+            let update = AnderLatestUpdateParser.newest(
+                serverResult.flatMap(AnderLatestUpdateParser.updatesManifest),
+                githubResult.flatMap(AnderLatestUpdateParser.githubRelease)
+            )
+            await MainActor.run {
+                completion(update?.version, update?.notes)
             }
         }
     }
 
-    private static func fetch(_ url: URL, completion: @escaping (Data?) -> Void) {
+    private static func fetch(_ url: URL) async -> Data? {
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("AnderStore/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            guard error == nil,
-                  let http = response as? HTTPURLResponse,
-                  (200..<300).contains(http.statusCode) else {
-                completion(nil)
-                return
-            }
-            completion(data)
-        }.resume()
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else { return nil }
+        return data
     }
 
     /// Checks at most every 6 hours; stores the result and notifies once per new version.

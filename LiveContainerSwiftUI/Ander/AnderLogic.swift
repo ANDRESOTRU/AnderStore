@@ -121,6 +121,18 @@ enum AnderLatestUpdateParser {
         return AnderLatestUpdate(version: version, notes: release.body)
     }
 
+    /// Chooses the newest valid stable result instead of trusting whichever endpoint replies
+    /// first. This keeps a temporarily stale server manifest from hiding a newer GitHub release.
+    static func newest(_ candidates: AnderLatestUpdate?...) -> AnderLatestUpdate? {
+        candidates.compactMap { $0 }.reduce(Optional<AnderLatestUpdate>.none) { current, candidate in
+            guard let current else { return candidate }
+            return AnderVersioning.isNewer(version: candidate.version,
+                                           build: nil,
+                                           than: current.version,
+                                           currentBuild: nil) ? candidate : current
+        }
+    }
+
     private static func validGitHubDigest(_ value: String?) -> Bool {
         guard let value, value.hasPrefix("sha256:") else { return false }
         return validSHA256(String(value.dropFirst("sha256:".count)))

@@ -19,6 +19,14 @@ final class AnderLogicTests: XCTestCase {
         XCTAssertNil(AnderLatestUpdateParser.githubRelease(nightly))
     }
 
+    func testNewestUpdatePrefersGitHubWhenServerManifestIsStale() {
+        let server = AnderLatestUpdate(version: "1.6.22", notes: "Server")
+        let github = AnderLatestUpdate(version: "1.6.26", notes: "GitHub")
+        XCTAssertEqual(AnderLatestUpdateParser.newest(server, github), github)
+        XCTAssertEqual(AnderLatestUpdateParser.newest(github, server), github)
+        XCTAssertEqual(AnderLatestUpdateParser.newest(server, nil), server)
+    }
+
     func testDeviceStatusKeepsPairingValidWhenVPNIsUnavailable() {
         let status = AnderDeviceStatusLogic.evaluate(pairing: .valid, minimuxerFailure: "noVPN")
         XCTAssertEqual(status.pairing, .valid)
