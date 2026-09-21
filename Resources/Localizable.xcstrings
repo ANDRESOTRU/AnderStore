@@ -33055,15 +33055,116 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turn on VPN, open AnderStore and tap Refresh, or your apps will stop opening."
+            "value" : "Your signature expires in 2 days. Open AnderStore for automatic renewal."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Включите VPN, откройте AnderStore и нажмите «Обновить», иначе приложения перестанут открываться."
+            "value" : "До окончания подписи осталось 2 дня. Откройте AnderStore для автоматического продления."
           }
         }
+      }
+    },
+    "lc.account.notificationsDisabled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications are disabled. Enable them in iOS Settings to receive the two-day signature warning."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Уведомления отключены. Включите их в настройках iOS, чтобы получить предупреждение за два дня."
+          }
+        }
+      }
+    },
+    "lc.vpn.requiredTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPN required" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Требуется VPN" } }
+      }
+    },
+    "lc.vpn.requiredBody" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "AnderStore will enable VPN for this operation and turn it off when finished." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "AnderStore включит VPN для этой операции и выключит после завершения." } }
+      }
+    },
+    "lc.vpn.missing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install VPN from the App Store to continue." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Чтобы продолжить, установите VPN из App Store." } }
+      }
+    },
+    "lc.vpn.pairingRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A valid pairing file is required before VPN can be used." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перед использованием VPN требуется действительный файл сопряжения." } }
+      }
+    },
+    "lc.vpn.openFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPN could not be opened." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось открыть VPN." } }
+      }
+    },
+    "lc.vpn.enableFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPN did not turn on. Open it, approve the VPN configuration, and try again." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "VPN не включился. Откройте его, разрешите добавление конфигурации VPN и повторите попытку." } }
+      }
+    },
+    "lc.vpn.disableFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "VPN could not be turned off automatically." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось автоматически выключить VPN." } }
+      }
+    },
+    "lc.vpn.enabling" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Turning on VPN… Approve the configuration if iOS asks." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Включаем VPN… Разрешите конфигурацию, если iOS запросит подтверждение." } }
+      }
+    },
+    "lc.vpn.disabling" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Operation finished. Turning off VPN…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Операция завершена. Выключаем VPN…" } }
+      }
+    },
+    "lc.vpn.install" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install VPN from App Store" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Установить VPN из App Store" } }
+      }
+    },
+    "lc.vpn.open" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open VPN" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Открыть VPN" } }
+      }
+    },
+    "lc.vpn.retryCheck" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Check again" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Повторить проверку" } }
       }
     },
     "lc.account.setupTitle" : {

@@ -91,6 +91,7 @@ final class AnderState: ObservableObject {
     @Published private(set) var renewalState: AnderRenewalState = .idle
     @Published private(set) var certificateSyncState: AnderCertificateSyncState = .idle
     @Published private(set) var resignSummary: String?
+    @Published private(set) var notificationPermissionDenied = false
 
     /// Expiration of AnderStore's own signature, read from the provisioning profile.
     @Published var signatureExpiration: Date?
@@ -204,11 +205,21 @@ final class AnderState: ObservableObject {
     }
 
     func handleForeground() {
+        scheduleSignatureReminder()
         refresh()
         refreshDeviceStatus()
         validateLocalSetup()
         synchronizeCertificate { [weak self] _ in
             self?.autoRenewIfNeeded()
+        }
+    }
+
+    func scheduleSignatureReminder() {
+        guard let signatureExpiration else { return }
+        AnderSignature.scheduleReminders(expiration: signatureExpiration) { [weak self] granted in
+            DispatchQueue.main.async {
+                self?.notificationPermissionDenied = !granted
+            }
         }
     }
 
@@ -310,25 +321,42 @@ final class AnderState: ObservableObject {
                   Date().timeIntervalSince1970 - lastAttempt > 6 * 3600 else { return }
         }
 
-        defaults.set(Date().timeIntervalSince1970, forKey: "anderLastAutoRefresh")
         certificateSyncState = .idle
         renewalState = .refreshing(0)
-        let started = AnderAccountAPI.refresh(progress: { [weak self] value in
-            self?.renewalState = .refreshing(value)
-        }, completion: { [weak self] failure in
+        Task { @MainActor [weak self] in
             guard let self else { return }
-            if let failure {
+            do {
+                try await AnderVPNCoordinator.shared.withVPN(reason: .signatureRefresh) {
+                    try await AnderAccountAPI.refreshAsync { [weak self] value in
+                        self?.renewalState = .refreshing(value)
+                    } onStarted: {
+                        // Missing VPN/Core must not consume the six-hour automatic retry interval.
+                        defaults.set(Date().timeIntervalSince1970, forKey: "anderLastAutoRefresh")
+                    }
+                }
+            } catch let failure as AnderCoreFailure {
                 self.renewalState = failure.kind == "noVPN" || failure.kind == "needsMinimuxer"
                     ? .needsVPN : .failed(AnderAccountAPI.friendly(failure))
                 completion?(self.renewalState)
                 return
+            } catch let failure as AnderVPNCoordinatorError {
+                self.renewalState = failure == .appMissing || failure == .connectionTimedOut || failure == .couldNotOpen
+                    ? .needsVPN : .failed(failure.localizedDescription)
+                completion?(self.renewalState)
+                return
+            } catch {
+                self.renewalState = .failed(error.localizedDescription)
+                completion?(self.renewalState)
+                return
             }
+
             self.markDeviceConnectionReady()
             self.synchronizeCertificate(force: true) { [weak self] syncState in
                 guard let self else { return }
                 switch syncState {
                 case .updated, .current:
                     self.signatureExpiration = AnderSignature.expirationDate()
+                    self.scheduleSignatureReminder()
                     self.renewalState = .complete
                     self.invalidate()
                 case .missing:
@@ -340,10 +368,6 @@ final class AnderState: ObservableObject {
                 }
                 completion?(self.renewalState)
             }
-        })
-        if !started {
-            renewalState = .failed("lc.account.errorNoExtension".loc)
-            completion?(renewalState)
         }
     }
 

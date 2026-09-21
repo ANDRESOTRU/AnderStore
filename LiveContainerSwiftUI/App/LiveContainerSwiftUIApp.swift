@@ -10,6 +10,7 @@ import SwiftUI
 struct LiveContainerSwiftUIApp : SwiftUI.App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var vpnCoordinator = AnderVPNCoordinator.shared
     
     init() {
         AnderTheme.applyAppearance()
@@ -108,8 +109,13 @@ struct LiveContainerSwiftUIApp : SwiftUI.App {
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
                 .environmentObject(DataManager.shared.model)
                 .environmentObject(LCAppSortManager.shared)
+                .environmentObject(vpnCoordinator)
+                .onAppear {
+                    vpnCoordinator.recoverOwnedSessionIfNeeded()
+                }
                 .onChange(of: scenePhase) { phase in
                     guard phase == .active else { return }
+                    guard !vpnCoordinator.handleForeground() else { return }
                     AnderState.shared.handleForeground()
                 }
         }

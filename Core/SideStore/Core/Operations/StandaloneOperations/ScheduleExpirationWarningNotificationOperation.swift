@@ -35,39 +35,29 @@ final class ScheduleExpirationWarningNotificationOperation: BaseStandaloneOperat
             expirationDate = installedApp.expirationDate
         }
 
-        let milestones: [(id: String, timeBeforeExp: TimeInterval, title: String, body: String)] = [
-            ("24h", 24 * 60 * 60, "AnderStore Expiring Soon", "AnderStore will expire in 24 hours. Open the app and refresh it to prevent it from expiring."),
-            ("6h",   6 * 60 * 60, "AnderStore Expiring Extremely Soon", "AnderStore will expire in 6 hours! Refresh now to prevent expiration."),
-            ("0h",   0,           "AnderStore Expired", "AnderStore has expired. Please refresh or reinstall the app.")
+        let identifier = "anderstore.signature.2d"
+        let allIdentifiers = [
+            identifier,
+            "anderstore.signature.1d",
+            "\(AppManager.expirationWarningNotificationID).24h",
+            "\(AppManager.expirationWarningNotificationID).6h",
+            "\(AppManager.expirationWarningNotificationID).0h"
         ]
-
-        let allIdentifiers = milestones.map { "\(AppManager.expirationWarningNotificationID).\($0.id)" }
         self.setProgress(50)
         center.removePendingNotificationRequests(withIdentifiers: allIdentifiers)
+        center.removeDeliveredNotifications(withIdentifiers: Array(allIdentifiers.dropFirst()))
 
-        let startProgress = self.progress.completedUnitCount
-        let endProgress: Int64 = 95
         #if !os(tvOS)
-        let range = endProgress - startProgress
-        let count = milestones.count
-        
-        for (index, milestone) in milestones.enumerated() {
-            if range > 0 {
-                let percent = startProgress + Int64(Double(index + 1) / Double(count) * Double(range))
-                self.setProgress(percent)
-            }
-            
-            let identifier = "\(AppManager.expirationWarningNotificationID).\(milestone.id)"
-            let targetDate = expirationDate.addingTimeInterval(-milestone.timeBeforeExp)
-            let triggerInterval = targetDate.timeIntervalSince(now)
-
-            // Skip milestones that are already in the past
-            guard triggerInterval > 0 else { continue }
-
+        let targetDate = expirationDate.addingTimeInterval(-48 * 60 * 60)
+        let triggerInterval = targetDate.timeIntervalSince(now)
+        // The host schedules an immediate reminder once when this point is already in the past.
+        // Core only owns the future request, preventing duplicate foreground notifications.
+        if triggerInterval > 0 {
             let content = UNMutableNotificationContent()
-            content.title = NSLocalizedString(milestone.title, comment: "")
-            content.body = NSLocalizedString(milestone.body, comment: "")
+            content.title = NSLocalizedString("lc.account.reminderTitle", comment: "")
+            content.body = NSLocalizedString("lc.account.reminderBody", comment: "")
             content.sound = .default
+            content.userInfo = ["anderAction": "renewSignature"]
 
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: triggerInterval, repeats: false)
             let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)

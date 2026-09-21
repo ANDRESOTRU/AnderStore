@@ -426,23 +426,49 @@ enum AnderSignature {
         max(0, Int(ceil(date.timeIntervalSinceNow / 86_400)))
     }
 
-    static func scheduleReminders(expiration: Date) {
+    static func scheduleReminders(expiration: Date, completion: ((Bool) -> Void)? = nil) {
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            DispatchQueue.main.async { completion?(granted) }
             guard granted else { return }
-            let ids = ["anderstore.signature.2d", "anderstore.signature.1d"]
-            center.removePendingNotificationRequests(withIdentifiers: ids)
-            for (id, daysBefore) in zip(ids, [2.0, 1.0]) {
-                let fireDate = expiration.addingTimeInterval(-daysBefore * 86_400)
-                guard fireDate > Date() else { continue }
-                let content = UNMutableNotificationContent()
-                content.title = "lc.account.reminderTitle".loc
-                content.body = "lc.account.reminderBody".loc
-                content.sound = .default
-                let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
-                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-                center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
+
+            let id = "anderstore.signature.2d"
+            let legacyIDs = ["anderstore.signature.1d",
+                          "sidestore-expiration-warning.24h",
+                          "sidestore-expiration-warning.6h",
+                          "sidestore-expiration-warning.0h"]
+            center.removePendingNotificationRequests(withIdentifiers: legacyIDs)
+            center.removeDeliveredNotifications(withIdentifiers: legacyIDs)
+
+            let now = Date()
+            guard expiration > now else { return }
+            let token = AnderSignatureReminderPolicy.deliveryToken(expiration: expiration)
+            let tokenKey = "anderSignatureReminderToken"
+            let defaults = UserDefaults.standard
+            // Repeated foreground checks keep the one request/delivered notification intact.
+            guard defaults.string(forKey: tokenKey) != token else { return }
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+            center.removeDeliveredNotifications(withIdentifiers: [id])
+
+            let content = UNMutableNotificationContent()
+            content.title = "lc.account.reminderTitle".loc
+            content.body = "lc.account.reminderBody".loc
+            content.sound = .default
+            content.userInfo = ["anderAction": "renewSignature"]
+
+            if AnderSignatureReminderPolicy.shouldDeliverImmediately(expiration: expiration, now: now) {
+                defaults.set(token, forKey: tokenKey)
+                center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+                return
             }
+
+            defaults.set(token, forKey: tokenKey)
+            let fireDate = AnderSignatureReminderPolicy.fireDate(expiration: expiration)
+            let trigger = UNTimeIntervalNotificationTrigger(
+                timeInterval: max(1, fireDate.timeIntervalSince(now)),
+                repeats: false
+            )
+            center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
         }
     }
 }
@@ -574,6 +600,22 @@ enum AnderAccountAPI {
                 })
     }
 
+    static func updateSelfAsync(version: String,
+                                progress: @escaping (Double) -> Void) async throws -> Bool {
+        try await withCheckedThrowingContinuation { continuation in
+            let started = updateSelf(version: version, progress: progress) { updated, failure in
+                if let failure {
+                    continuation.resume(throwing: failure)
+                } else {
+                    continuation.resume(returning: updated ?? false)
+                }
+            }
+            if !started {
+                continuation.resume(throwing: AnderVPNCoordinatorError.coreUnavailable)
+            }
+        }
+    }
+
     @discardableResult
     static func refresh(progress: @escaping (Double) -> Void,
                         completion: @escaping (AnderCoreFailure?) -> Void) -> Bool {
@@ -584,6 +626,24 @@ enum AnderAccountAPI {
                     }
                 },
                 completion: { _, failure in completion(failure) })
+    }
+
+    static func refreshAsync(progress: @escaping (Double) -> Void,
+                             onStarted: @escaping () -> Void = {}) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let started = refresh(progress: progress) { failure in
+                if let failure {
+                    continuation.resume(throwing: failure)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+            if !started {
+                continuation.resume(throwing: AnderVPNCoordinatorError.coreUnavailable)
+            } else {
+                onStarted()
+            }
+        }
     }
 
     /// Copies the active Core certificate through the command channel. Core runs with a
@@ -715,6 +775,7 @@ struct AnderAccountView: View {
     @AppStorage("anderAppleID") private var savedAppleID = ""
 
     @ObservedObject private var state = AnderState.shared
+    @ObservedObject private var vpnCoordinator = AnderVPNCoordinator.shared
     @State private var expiration: Date? = nil
     @State private var coreAvailable = true
     @State private var phase: Phase = .idle
@@ -738,6 +799,9 @@ struct AnderAccountView: View {
                 VStack(spacing: 16) {
                     header
                     readinessCard
+                    if vpnCoordinator.needsAttention || vpnCoordinator.state == .enabling || vpnCoordinator.state == .disabling {
+                        vpnCard
+                    }
                     if updateAvailable || isUpdating {
                         updateCard
                     }
@@ -842,24 +906,89 @@ struct AnderAccountView: View {
         }
         message = nil
         phase = .updating(0)
-        let started = AnderAccountAPI.updateSelf(version: latestVersion, progress: { value in
-            phase = .updating(value)
-        }, completion: { updated, failure in
-            phase = .idle
-            if let failure {
+        Task { @MainActor in
+            do {
+                let updated = try await vpnCoordinator.withVPN(reason: .selfUpdate) {
+                    try await AnderAccountAPI.updateSelfAsync(version: latestVersion) { value in
+                        phase = .updating(value)
+                    }
+                }
+                phase = .idle
+                if !updated {
+                    message = "lc.update.notInstalled".loc
+                } else {
+                    state.markDeviceConnectionReady()
+                    message = "lc.update.installed".loc
+                    latestNotes = ""
+                }
+            } catch let failure as AnderCoreFailure {
+                phase = .idle
                 message = AnderAccountAPI.friendly(failure)
-            } else if updated == false {
-                message = "lc.update.notInstalled".loc
-            } else {
-                state.markDeviceConnectionReady()
-                message = "lc.update.installed".loc
-                latestNotes = ""
+            } catch {
+                phase = .idle
+                message = error.localizedDescription
             }
-        })
-        if !started {
-            phase = .idle
-            message = "lc.account.errorNoExtension".loc
         }
+    }
+
+    private func retryVPNOperation() {
+        vpnCoordinator.refreshAvailability()
+        guard vpnCoordinator.appInstalled else { return }
+        switch vpnCoordinator.lastReason {
+        case .selfUpdate:
+            updateSelf()
+        case .signatureRefresh, .appsRefresh:
+            refresh()
+        case .deviceOperation, .none:
+            state.refreshDeviceStatus()
+        }
+    }
+
+    private var vpnCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: vpnCoordinator.state == .missingApp ? "shield.slash" : "shield.lefthalf.filled")
+                    .font(.title2)
+                    .foregroundColor(.orange)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("lc.vpn.requiredTitle".loc).font(.body.weight(.semibold))
+                    switch vpnCoordinator.state {
+                    case .missingApp:
+                        Text("lc.vpn.missing".loc)
+                    case .enabling:
+                        Text("lc.vpn.enabling".loc)
+                    case .disabling:
+                        Text("lc.vpn.disabling".loc)
+                    case .failed(let detail):
+                        Text(detail)
+                    default:
+                        Text("lc.vpn.requiredBody".loc)
+                    }
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            if vpnCoordinator.state == .missingApp {
+                Button("lc.vpn.install".loc) { vpnCoordinator.openStore() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AnderTheme.accent)
+            } else if case .failed = vpnCoordinator.state {
+                HStack {
+                    Button("lc.common.retry".loc, action: retryVPNOperation)
+                    Button("lc.vpn.open".loc) { vpnCoordinator.openVPNApp() }
+                }
+                .buttonStyle(.bordered)
+                .tint(AnderTheme.accent)
+            }
+            if vpnCoordinator.state == .missingApp {
+                Button("lc.vpn.retryCheck".loc, action: retryVPNOperation)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(AnderTheme.accent)
+            }
+        }
+        .anderCard()
     }
 
     private var updateCheckRow: some View {
@@ -941,11 +1070,10 @@ struct AnderAccountView: View {
         AnderUpdateChecker.checkIfNeeded()
         expiration = AnderSignature.expirationDate()
         coreAvailable = AnderAccountAPI.isAvailable
-        if let expiration {
-            AnderSignature.scheduleReminders(expiration: expiration)
-        }
         // Paints from the cached snapshot; only goes to Core when that snapshot is old.
-        state.handleForeground()
+        if !vpnCoordinator.handleForeground() {
+            state.handleForeground()
+        }
         if email.isEmpty { email = savedAppleID }
         // The foreground coordinator may start Core for a local, network-free certificate sync.
     }
@@ -1070,6 +1198,11 @@ struct AnderAccountView: View {
             Text("lc.account.refreshHint".loc)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            if state.notificationPermissionDenied {
+                Text("lc.account.notificationsDisabled".loc)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
             if case .refreshing = state.renewalState {
                 EmptyView()
             } else {

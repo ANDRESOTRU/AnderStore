@@ -1,10 +1,12 @@
 import UIKit
 import SwiftUI
 import Intents
+import UserNotifications
 
-@objc class AppDelegate: UIResponder, UIApplicationDelegate {
+@objc class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
         
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
         application.shortcutItems = nil
         UserDefaults.standard.removeObject(forKey: "LCNeedToAcquireJIT")
         
@@ -32,6 +34,29 @@ import Intents
         }
         
         return true
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        guard response.notification.request.content.userInfo["anderAction"] as? String == "renewSignature" else {
+            completionHandler()
+            return
+        }
+
+        DispatchQueue.main.async {
+            DataManager.shared.model.selectedTab = .account
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+                AnderState.shared.autoRenewIfNeeded(force: true)
+            }
+        }
+        completionHandler()
     }
     
     func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {

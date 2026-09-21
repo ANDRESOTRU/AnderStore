@@ -152,4 +152,37 @@ final class AnderLogicTests: XCTestCase {
         XCTAssertEqual(restored, "old")
         XCTAssertFalse(FileManager.default.fileExists(atPath: prepared.path))
     }
+
+    func testVPNLeaseOnlyStopsTunnelStartedByAnderStore() {
+        var existingTunnel = AnderVPNLeasePolicy()
+        existingTunnel.acquire(tunnelWasAlreadyConnected: true)
+        XCTAssertFalse(existingTunnel.release())
+
+        var ownedTunnel = AnderVPNLeasePolicy()
+        ownedTunnel.acquire(tunnelWasAlreadyConnected: false)
+        ownedTunnel.acquire(tunnelWasAlreadyConnected: false)
+        XCTAssertFalse(ownedTunnel.release())
+        XCTAssertTrue(ownedTunnel.release())
+        XCTAssertEqual(ownedTunnel.activeLeases, 0)
+    }
+
+    func testVPNHandoffExpiresAfterTwoMinutes() {
+        XCTAssertTrue(AnderVPNHandoffPolicy.isRecoverable(createdAt: 1_000, now: 1_119))
+        XCTAssertFalse(AnderVPNHandoffPolicy.isRecoverable(createdAt: 1_000, now: 1_121))
+        XCTAssertFalse(AnderVPNHandoffPolicy.isRecoverable(createdAt: 1_001, now: 1_000))
+    }
+
+    func testSignatureReminderIsExactlyTwoDaysBeforeExpiry() {
+        let expiration = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertEqual(AnderSignatureReminderPolicy.fireDate(expiration: expiration),
+                       expiration.addingTimeInterval(-48 * 60 * 60))
+        XCTAssertTrue(AnderSignatureReminderPolicy.shouldDeliverImmediately(
+            expiration: expiration,
+            now: expiration.addingTimeInterval(-24 * 60 * 60)
+        ))
+        XCTAssertFalse(AnderSignatureReminderPolicy.shouldDeliverImmediately(
+            expiration: expiration,
+            now: expiration.addingTimeInterval(-72 * 60 * 60)
+        ))
+    }
 }

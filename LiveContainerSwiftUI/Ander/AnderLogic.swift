@@ -330,3 +330,56 @@ struct AnderUpdatesManifest: Decodable {
     let liveContainer: Artifact
     let installer: Artifact
 }
+
+// MARK: - VPN and signature reminder policies
+
+/// Pure ownership bookkeeping shared by the UI coordinator and its tests. AnderStore only
+/// switches off a tunnel it started itself, and only after the final dependent operation ends.
+struct AnderVPNLeasePolicy: Equatable {
+    private(set) var activeLeases = 0
+    private(set) var startedByAnderStore = false
+
+    mutating func acquire(tunnelWasAlreadyConnected: Bool) {
+        if activeLeases == 0 {
+            startedByAnderStore = !tunnelWasAlreadyConnected
+        }
+        activeLeases += 1
+    }
+
+    /// Returns true when the caller must request VPN shutdown.
+    mutating func release() -> Bool {
+        guard activeLeases > 0 else { return false }
+        activeLeases -= 1
+        let shouldStop = activeLeases == 0 && startedByAnderStore
+        if activeLeases == 0 {
+            startedByAnderStore = false
+        }
+        return shouldStop
+    }
+}
+
+enum AnderVPNHandoffPolicy {
+    static let maximumAge: TimeInterval = 2 * 60
+
+    static func isRecoverable(createdAt: TimeInterval,
+                              now: TimeInterval,
+                              maximumAge: TimeInterval = maximumAge) -> Bool {
+        createdAt > 0 && now >= createdAt && now - createdAt <= maximumAge
+    }
+}
+
+enum AnderSignatureReminderPolicy {
+    static let leadTime: TimeInterval = 48 * 60 * 60
+
+    static func fireDate(expiration: Date) -> Date {
+        expiration.addingTimeInterval(-leadTime)
+    }
+
+    static func shouldDeliverImmediately(expiration: Date, now: Date) -> Bool {
+        expiration > now && fireDate(expiration: expiration) <= now
+    }
+
+    static func deliveryToken(expiration: Date) -> String {
+        String(Int(expiration.timeIntervalSince1970))
+    }
+}
