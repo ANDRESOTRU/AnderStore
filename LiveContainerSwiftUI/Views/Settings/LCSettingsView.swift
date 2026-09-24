@@ -180,50 +180,6 @@ struct LCSettingsView: View {
             } message: {
                 Text(successInfo)
             }
-            .alert("lc.settings.importCertificate".loc, isPresented: $certificateImportAlert.show) {
-                Button {
-                    certificateImportAlert.close(result: true)
-                } label: {
-                    Text("lc.common.ok".loc)
-                }
-
-                Button("lc.common.cancel".loc, role: .cancel) {
-                    certificateImportAlert.close(result: false)
-                }
-            } message: {
-                Text("lc.settings.importCertificateDesc".loc)
-            }
-            .alert("lc.settings.removeCertificate".loc, isPresented: $certificateRemoveAlert.show) {
-                Button(role: .destructive) {
-                    certificateRemoveAlert.close(result: true)
-                } label: {
-                    Text("lc.common.ok".loc)
-                }
-
-                Button("lc.common.cancel".loc, role: .cancel) {
-                    certificateRemoveAlert.close(result: false)
-                }
-            } message: {
-                Text("lc.settings.removeCertificateDesc".loc)
-            }
-            .betterFileImporter(isPresented: $certificateImportFileAlert.show, types: [.p12], multiple: false, callback: { fileUrls in
-                certificateImportFileAlert.close(result: fileUrls[0])
-            }, onDismiss: {
-                certificateImportFileAlert.close(result: nil)
-            })
-            .textFieldAlert(
-                isPresented: $certificateImportPasswordAlert.show,
-                title: "lc.settings.importCertificateInputPassword".loc,
-                text: $certificateImportPasswordAlert.initVal,
-                placeholder: "",
-                action: { newText in
-                    certificateImportPasswordAlert.close(result: newText)
-                },
-                actionCancel: {_ in
-                    certificateImportPasswordAlert.close(result: nil)
-                    certificateImportPasswordAlert.show = false
-                }
-            )
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .onAppear() {
@@ -469,6 +425,50 @@ struct LCSettingsView: View {
             }
         }
         .navigationTitle("lc.settings.advanced".loc)
+        .alert("lc.settings.importCertificate".loc, isPresented: $certificateImportAlert.show) {
+            Button {
+                certificateImportAlert.close(result: true)
+            } label: {
+                Text("lc.common.ok".loc)
+            }
+
+            Button("lc.common.cancel".loc, role: .cancel) {
+                certificateImportAlert.close(result: false)
+            }
+        } message: {
+            Text("lc.settings.importCertificateDesc".loc)
+        }
+        .alert("lc.settings.removeCertificate".loc, isPresented: $certificateRemoveAlert.show) {
+            Button(role: .destructive) {
+                certificateRemoveAlert.close(result: true)
+            } label: {
+                Text("lc.common.ok".loc)
+            }
+
+            Button("lc.common.cancel".loc, role: .cancel) {
+                certificateRemoveAlert.close(result: false)
+            }
+        } message: {
+            Text("lc.settings.removeCertificateDesc".loc)
+        }
+        .betterFileImporter(isPresented: $certificateImportFileAlert.show, types: [.p12], multiple: false, callback: { fileUrls in
+            certificateImportFileAlert.close(result: fileUrls[0])
+        }, onDismiss: {
+            certificateImportFileAlert.close(result: nil)
+        })
+        .textFieldAlert(
+            isPresented: $certificateImportPasswordAlert.show,
+            title: "lc.settings.importCertificateInputPassword".loc,
+            text: $certificateImportPasswordAlert.initVal,
+            placeholder: "",
+            action: { newText in
+                certificateImportPasswordAlert.close(result: newText)
+            },
+            actionCancel: {_ in
+                certificateImportPasswordAlert.close(result: nil)
+                certificateImportPasswordAlert.show = false
+            }
+        )
         .alert("lc.settings.dontSign".loc, isPresented: $dontSignConfirm) {
             Button("lc.common.cancel".loc, role: .cancel) {}
             Button("lc.common.continue".loc, role: .destructive) { dontSignApp = true }

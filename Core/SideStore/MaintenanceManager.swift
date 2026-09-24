@@ -58,7 +58,8 @@ public final class MaintenanceManager {
                 if UserDefaults.standard.useOnDeviceAnisette, !AnderAnisettePolicy.userChoseMode {
                     AuthManager.shared.signOut(keepCertificate: true, keepAnisetteData: false)
                 }
-                AnderAnisettePolicy.applyDefaults(force: true)
+                // Not forced: a user who deliberately picked on-device mode keeps it.
+                AnderAnisettePolicy.applyDefaults()
                 Task { await AnderAnisettePolicy.seedServerListIfNeeded() }
             default:
                 break
