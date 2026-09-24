@@ -13,7 +13,7 @@ public final class MaintenanceManager {
     public static let shared = MaintenanceManager()
 
     // Increment this counter whenever you want to trigger another maintenance pass in future updates
-    public static let currentMaintenanceCounter = 3
+    public static let currentMaintenanceCounter = 4
 
     public static let maintenanceCounterFileName = ".maintenance_counter"
 
@@ -51,6 +51,15 @@ public final class MaintenanceManager {
                 AuthManager.shared.signOut(keepCertificate: true, keepAnisetteData: false)
             case 3:
                 UserDefaults.standard.tunnelOverridePeerIp = nil
+            case 4:
+                // AnderStore: devices that already ran with on-device ADI carry a half
+                // provisioned adi.pb, which would break the server path too. Clear the sign-in
+                // data but keep the certificate, so installed apps keep launching.
+                if UserDefaults.standard.useOnDeviceAnisette, !AnderAnisettePolicy.userChoseMode {
+                    AuthManager.shared.signOut(keepCertificate: true, keepAnisetteData: false)
+                }
+                AnderAnisettePolicy.applyDefaults(force: true)
+                Task { await AnderAnisettePolicy.seedServerListIfNeeded() }
             default:
                 break
             }

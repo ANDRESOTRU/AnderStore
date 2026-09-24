@@ -574,6 +574,15 @@ enum AnderAccountAPI {
         perform("account.submitCode", params: ["code": code]) { _, _ in }
     }
 
+    /// Clears the stored sign-in and the Apple provisioning data, keeping the certificate so
+    /// installed apps keep launching. Recovery for a broken Apple token state.
+    @discardableResult
+    static func resetAnisette(completion: @escaping (AnderCoreFailure?) -> Void) -> Bool {
+        perform("account.resetAnisette", params: ["keepCertificate": true]) { _, failure in
+            completion(failure)
+        }
+    }
+
     static func status(completion: @escaping (String?, String?) -> Void) {
         let started = perform("account.status") { response, _ in
             completion(response?["appleID"] as? String, response?["team"] as? String)
@@ -718,6 +727,8 @@ enum AnderAccountAPI {
             return "lc.account.sessionExpired".loc
         case "rateLimited":
             return "lc.account.errorRateLimited".loc
+        case "adiNotProvisioned", "anisetteUnavailable":
+            return "lc.account.errorAnisette".loc
         case "noVPN", "needsMinimuxer", "noConnection", "needsPairing", "noDevice", "timedOut":
             return "lc.account.errorVPN".loc
         case "coreUnavailable", "noBundle", "notConnected", "terminated", "startTimeout", "unsupportedCommand", "unsupportedProtocol":
@@ -730,6 +741,10 @@ enum AnderAccountAPI {
     /// Fallback for messages Core could not classify.
     static func friendly(_ error: String) -> String {
         let lower = error.lowercased()
+        // Before the VPN branch below, whose "connect" would otherwise swallow this.
+        if lower.contains("-45061") || lower.contains("adiotprequest") || lower.contains("not provisioned") {
+            return "lc.account.errorAnisette".loc
+        }
         if lower.contains("429") || lower.contains("too many requests") {
             return "lc.account.errorTooMany".loc
         }
@@ -782,6 +797,12 @@ struct AnderAccountView: View {
     @State private var password = ""
     @State private var code = ""
     @State private var message: String? = nil
+    /// Kept alongside the message so the screen can offer the right recovery.
+    @State private var lastFailureKind: String? = nil
+    /// Confirmation text, as opposed to `message`, which is an error.
+    @State private var notice: String? = nil
+    @State private var showResetConfirm = false
+    @State private var cooldownTick = 0
     @State private var showSignInForm = false
     @State private var showSetupInstructions = false
 
@@ -811,12 +832,28 @@ struct AnderAccountView: View {
                     if case .needsCode(let prompt) = phase {
                         codeCard(prompt: prompt)
                     }
-                    if let message {
-                        Text(message)
+                    if let notice {
+                        Text(notice)
                             .font(.footnote)
-                            .foregroundColor(.red)
+                            .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .anderCard()
+                    }
+                    if let message {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(message)
+                                .font(.footnote)
+                                .foregroundColor(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if showsAnisetteRecovery {
+                                Button("lc.account.resetSignInData".loc) {
+                                    showResetConfirm = true
+                                }
+                                .font(.footnote.weight(.semibold))
+                                .foregroundColor(AnderTheme.accent)
+                            }
+                        }
+                        .anderCard()
                     }
                     if let resignSummary = state.resignSummary {
                         VStack(alignment: .leading, spacing: 10) {
@@ -846,6 +883,19 @@ struct AnderAccountView: View {
             .background(AnderTheme.background.ignoresSafeArea())
             .navigationTitle("lc.tabView.device".loc)
             .onAppear(perform: reload)
+            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+                if signInBlockedUntil > Date().timeIntervalSince1970 {
+                    cooldownTick &+= 1
+                } else if cooldownTick != 0 {
+                    cooldownTick = 0
+                }
+            }
+            .alert("lc.account.resetSignInData".loc, isPresented: $showResetConfirm) {
+                Button("lc.common.cancel".loc, role: .cancel) {}
+                Button("lc.common.continue".loc, role: .destructive) { resetSignInData() }
+            } message: {
+                Text("lc.account.resetSignInDataDesc".loc)
+            }
             .sheet(isPresented: $showSetupInstructions) {
                 NavigationView { AnderSetupInstructionsView() }
             }
@@ -1079,8 +1129,39 @@ struct AnderAccountView: View {
 
     // MARK: Actions
 
+    /// `cooldownTick` is only read so SwiftUI recomputes this when the timer fires — without it
+    /// the button stays disabled until some unrelated change redraws the screen.
     private var signInCooldown: Int {
-        max(0, Int(signInBlockedUntil - Date().timeIntervalSince1970))
+        _ = cooldownTick
+        return max(0, Int(signInBlockedUntil - Date().timeIntervalSince1970))
+    }
+
+    /// Only offer the reset where it actually helps: a broken Apple token state.
+    private var showsAnisetteRecovery: Bool {
+        guard let lastFailureKind else { return false }
+        return lastFailureKind == "adiNotProvisioned" || lastFailureKind == "anisetteUnavailable"
+    }
+
+    private func resetSignInData() {
+        message = nil
+        notice = nil
+        lastFailureKind = nil
+        signInBlockedUntil = 0
+        let started = AnderAccountAPI.resetAnisette { failure in
+            if let failure {
+                message = AnderAccountAPI.friendly(failure)
+                lastFailureKind = failure.kind
+                return
+            }
+            savedAppleID = ""
+            password = ""
+            showSignInForm = true
+            state.clearAccountAfterSignOut()
+            notice = "lc.account.resetSignInDataDone".loc
+        }
+        if !started {
+            message = "lc.account.errorNoExtension".loc
+        }
     }
 
     private func signIn() {
@@ -1096,6 +1177,7 @@ struct AnderAccountView: View {
             return
         }
         message = nil
+        notice = nil
         phase = .signingIn
         let started = AnderAccountAPI.signIn(appleID: appleID, password: password, onCode: { prompt in
             code = ""
@@ -1105,11 +1187,21 @@ struct AnderAccountView: View {
             password = ""
             if let failure {
                 message = AnderAccountAPI.friendly(failure)
-                // Apple ограничивает вход при частых попытках — сами держим паузу
-                let pause: TimeInterval = failure.kind == "rateLimited" ? 30 * 60 : 60
-                signInBlockedUntil = Date().timeIntervalSince1970 + pause
+                lastFailureKind = failure.kind
+                // Пауза только там, где она осмысленна: 30 минут — это ограничение Apple,
+                // короткая задержка после неверного пароля бережёт от того же ограничения,
+                // а за свои ошибки (нет VPN, отмена ввода кода) блокировать не за что.
+                switch failure.kind {
+                case "rateLimited":
+                    signInBlockedUntil = Date().timeIntervalSince1970 + 30 * 60
+                case "needsAuth":
+                    signInBlockedUntil = Date().timeIntervalSince1970 + 15
+                default:
+                    signInBlockedUntil = 0
+                }
                 return
             }
+            lastFailureKind = nil
             signInBlockedUntil = 0
             savedAppleID = account ?? appleID
             showSignInForm = false

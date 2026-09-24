@@ -31,6 +31,7 @@ final class AnderCoreBridge: NSObject {
         "account.submitCode",
         "account.status",
         "account.signOut",
+        "account.resetAnisette",
         "snapshot",
         "self.update",
         "apps.refresh",
@@ -55,6 +56,12 @@ final class AnderCoreBridge: NSObject {
                         onEvent: @escaping ([String: Any]) -> Void,
                         completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
         let command = request["cmd"] as? String ?? ""
+
+        // Cheap and idempotent: make sure every command runs with AnderStore's own anisette
+        // server, not the on-device ADI path that can never provision itself here.
+        AnderAnisettePolicy.applyDefaults()
+        Task { await AnderAnisettePolicy.seedServerListIfNeeded() }
+
         switch command {
         case "handshake":
             completion([
@@ -83,6 +90,15 @@ final class AnderCoreBridge: NSObject {
             let keepCertificate = request["keepCertificate"] as? Bool ?? true
             AuthManager.shared.signOut(keepCertificate: keepCertificate)
             completion([:], nil)
+
+        case "account.resetAnisette":
+            // Recovery from a broken Apple token state: clears the stored sign-in and the
+            // provisioning blob, keeps the signing certificate so installed apps still launch.
+            AuthManager.shared.signOut(keepCertificate: request["keepCertificate"] as? Bool ?? true,
+                                       keepAnisetteData: false)
+            AnderAnisettePolicy.applyDefaults(force: true)
+            Task { await AnderAnisettePolicy.seedServerListIfNeeded(force: true) }
+            completion(["reset": true], nil)
 
         case "snapshot":
             let fields = Set(request["fields"] as? [String] ?? ["account", "certificate", "apps"])
@@ -671,7 +687,16 @@ final class AnderCoreBridge: NSObject {
                 nsError.userInfo[NSDebugDescriptionErrorKey].map { String(describing: $0) } ?? ""
             ]
             let text = diagnosticParts.joined(separator: " ").lowercased()
-            if text.contains("too many requests") || text.contains("429") {
+            // Apple token (anisette/ADI) failures first: the code is authoritative, the text is
+            // only a fallback for when the library localizes its message.
+            let underlyingCode = (nsError.userInfo[NSUnderlyingErrorKey] as? NSError)?.code
+            if nsError.code == -45061 || underlyingCode == -45061
+                || text.contains("-45061") || text.contains("adiotprequest")
+                || text.contains("not provisioned") {
+                kind = "adiNotProvisioned"
+            } else if text.contains("anisette") {
+                kind = "anisetteUnavailable"
+            } else if text.contains("too many requests") || text.contains("429") {
                 kind = "rateLimited"
             } else if text.contains("cancel") {
                 kind = "cancelled"

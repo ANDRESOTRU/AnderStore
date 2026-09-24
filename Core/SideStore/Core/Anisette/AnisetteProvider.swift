@@ -11,9 +11,19 @@ import SideSign
 
 enum AnisetteProvider {
     static func fetch(handler: AnisetteServerHandler? = nil) async throws -> ALTAnisetteData {
-        if UserDefaults.standard.useOnDeviceAnisette {
+        // AnderStore: on-device ADI is used only when the user chose it and it is actually
+        // provisioned. Otherwise it fails with "Device not provisioned (-45061)" and takes
+        // sign-in down with it.
+        if AnderAnisettePolicy.useOnDeviceAnisette, await OnDeviceAnisetteManager.shared.isReady() {
             debugLog("[AnisetteProvider] Fetching anisette via On-Device Anisette (ODA)...")
-            return try await OnDeviceAnisetteManager.shared.fetchAnisetteData()
+            do {
+                return try await OnDeviceAnisetteManager.shared.fetchAnisetteData()
+            } catch {
+                // Both paths share one adi.pb; a half-provisioned blob would break the server too.
+                debugLog("[AnisetteProvider] ODA failed (\(error)); falling back to the remote server")
+                AnderAnisettePolicy.clearProvisioningBlob()
+                return try await fetchRemote(handler: handler)
+            }
         } else {
             debugLog("[AnisetteProvider] Fetching anisette via remote server...")
             return try await fetchRemote(handler: handler)
@@ -22,9 +32,16 @@ enum AnisetteProvider {
 
     private static func fetchRemote(handler: AnisetteServerHandler? = nil) async throws -> ALTAnisetteData {
         let serverUrlStrings = await AnisetteServersManager.shared.getActiveServerURLs()
-        let servers = serverUrlStrings.compactMap { URL(string: $0) }
-        guard !servers.isEmpty else {
-            throw AnisetteError.noServersConfigured
+        var servers = serverUrlStrings.compactMap { URL(string: $0) }
+        if servers.isEmpty {
+            // The list lives in a local cache that only the daily sync fills. On a fresh install
+            // it is empty, and refusing here would fail the very first sign-in — so fall back to
+            // the AnderStore server rather than giving up.
+            debugLog("[AnisetteProvider] No cached anisette servers; using the AnderStore server")
+            guard let fallback = URL(string: AppConstants.Anisette.Servers.defaultServerURL) else {
+                throw AnisetteError.noServersConfigured
+            }
+            servers = [fallback]
         }
 
         let lastServer = UserDefaults.standard.menuAnisetteURL

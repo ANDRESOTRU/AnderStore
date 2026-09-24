@@ -33864,6 +33864,74 @@
         }
       }
     },
+    "lc.account.errorAnisette" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not get an Apple verification token. Tap “Reset sign-in data” and sign in again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось получить проверочный токен Apple. Нажмите «Сбросить данные входа» и войдите заново."
+          }
+        }
+      }
+    },
+    "lc.account.resetSignInData" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset sign-in data"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сбросить данные входа"
+          }
+        }
+      }
+    },
+    "lc.account.resetSignInDataDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore will forget the Apple ID and the saved verification data, and you will sign in again. The certificate and installed apps are kept."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore забудет Apple ID и сохранённые проверочные данные, вход нужно будет выполнить заново. Сертификат и установленные приложения останутся на месте."
+          }
+        }
+      }
+    },
+    "lc.account.resetSignInDataDone" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done. Sign in with your Apple ID again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Готово. Войдите в Apple ID заново."
+          }
+        }
+      }
+    },
     "lc.account.errorRateLimited" : {
       "extractionState" : "manual",
       "localizations" : {

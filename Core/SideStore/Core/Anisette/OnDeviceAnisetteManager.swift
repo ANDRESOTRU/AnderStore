@@ -60,8 +60,10 @@ public actor OnDeviceAnisetteManager {
 
         let headers = await AnisetteConfigManager.shared.makeRequestHeaders()
 
-        let sourceURLString = UserDefaults.standard.menuAnisetteList.isEmpty ? AnisetteServersManager.defaultSource : UserDefaults.standard.menuAnisetteList
-        let sourceURL = URL(string: sourceURLString) ?? AppConstants.Anisette.defaultODAMetadataURL
+        // AnderStore: this must be the ODA metadata URL. It used to read `menuAnisetteList`,
+        // which is the anisette *server list* — a different schema entirely, so the libraries
+        // were never resolved and provisioning could not happen.
+        let sourceURL = AppConstants.Anisette.defaultODAMetadataURL
         let fallbackURL = AppConstants.Anisette.defaultODAMetadataURL
 
         let mode = AnisetteMode.remoteODA(sourceURL: sourceURL, fallbackURL: fallbackURL)
