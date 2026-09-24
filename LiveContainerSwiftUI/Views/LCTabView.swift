@@ -1659,7 +1659,7 @@ struct AnderAboutView: View {
                     }
                     .frame(width: 64, height: 64)
                     Text("AnderStore").font(.title3.weight(.semibold))
-                    Text(LCUtils.getVersionInfo()).font(.footnote).foregroundStyle(.secondary)
+                    Text(AnderUpdateChecker.currentVersion).font(.footnote).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -1675,7 +1675,7 @@ struct AnderAboutView: View {
                             return
                         }
                         updateState = AnderUpdateChecker.isNewer(version, than: AnderUpdateChecker.currentVersion)
-                            ? String(format: "lc.update.available".loc, version) + " — " + "lc.tabView.account".loc
+                            ? String(format: "lc.update.available".loc, version) + " — " + "lc.tabView.device".loc
                             : String(format: "lc.update.upToDate".loc, AnderUpdateChecker.currentVersion)
                     }
                 } label: {

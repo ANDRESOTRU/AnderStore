@@ -580,9 +580,9 @@ struct AnderComponentsView: View {
         List {
             componentRow("AnderStore", key: "anderstore")
             componentRow("Core", key: "core")
-            componentRow("LiveContainer", key: "liveContainer")
+            componentRow("lc.components.engine".loc, key: "liveContainer")
             if let commit = local["commit"] {
-                HStack { Text("Commit"); Spacer(); Text(String(commit.prefix(12))).foregroundStyle(.secondary) }
+                HStack { Text("lc.components.commit".loc); Spacer(); Text(String(commit.prefix(12))).foregroundStyle(.secondary) }
             }
             if let buildDate = local["buildDate"] {
                 HStack { Text("lc.components.buildDate".loc); Spacer(); Text(buildDate).foregroundStyle(.secondary) }

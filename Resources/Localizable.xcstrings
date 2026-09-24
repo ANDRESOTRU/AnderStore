@@ -2500,7 +2500,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Конвертировать приложения в общие приложения для использования их во втором AnderStore'е"
+            "value" : "Конвертировать приложения в общие, чтобы запускать их во второй копии AnderStore"
           }
         },
         "sv" : {
@@ -9675,7 +9675,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Исправляет некоторые проблемы использованием ИД пакета AnderStore'а в ходе перезаписи основного пакета."
+            "value" : "Исправляет некоторые проблемы: при перезаписи основного пакета используется идентификатор пакета AnderStore."
           }
         },
         "sv" : {
@@ -18773,7 +18773,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "About Me"
+            "value" : "About"
           }
         },
         "es" : {
@@ -18821,7 +18821,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Обо мне"
+            "value" : "О приложении"
           }
         },
         "sv" : {
@@ -21819,7 +21819,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Окантовать иконки блиц-приложений"
+            "value" : "Рамка на иконках ярлыков"
           }
         },
         "sv" : {
@@ -22894,7 +22894,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "интерфейс"
+            "value" : "Интерфейс"
           }
         },
         "sv" : {
@@ -24808,7 +24808,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Несколько AnderStore'ов"
+            "value" : "Несколько копий AnderStore"
           }
         },
         "sv" : {
@@ -27145,6 +27145,12 @@
             "state" : "translated",
             "value" : "Default 32-bit emulator"
           }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эмулятор 32-бит по умолчанию"
+          }
         }
       }
     },
@@ -27368,7 +27374,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "По умолчанию LiveContauner будет у вас спрашивать, как открыть данный URL. Включите это, чтобы автоматически открывать URL в текущем приложении."
+            "value" : "По умолчанию AnderStore будет у вас спрашивать, как открыть данный URL. Включите это, чтобы автоматически открывать URL в текущем приложении."
           }
         },
         "sv" : {
@@ -28223,7 +28229,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Не пользуйтесь AnderStore'ом для пиратства."
+            "value" : "Не используйте AnderStore для пиратства."
           }
         },
         "sv" : {
@@ -32936,13 +32942,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Help with pictures"
+            "value" : "Help"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Помощь с картинками"
+            "value" : "Помощь"
           }
         }
       }
@@ -33860,6 +33866,142 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Неверный Apple ID или пароль. Проверьте и попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "lc.components.engine" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Engine"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Движок"
+          }
+        }
+      }
+    },
+    "lc.components.commit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Build"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сборка"
+          }
+        }
+      }
+    },
+    "lc.settings.signature" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signature"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подпись"
+          }
+        }
+      }
+    },
+    "lc.settings.behaviour" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Behaviour"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поведение"
+          }
+        }
+      }
+    },
+    "lc.settings.advanced" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For advanced users"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Для опытных пользователей"
+          }
+        }
+      }
+    },
+    "lc.settings.advancedDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only if you know what you need there."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Только если вы знаете, зачем."
+          }
+        }
+      }
+    },
+    "lc.settings.dangerous" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dangerous"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Опасно"
+          }
+        }
+      }
+    },
+    "lc.settings.dontSignConfirm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps installed while this is on will not launch. Turn it on anyway?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приложения, установленные с этой включённой опцией, не будут запускаться. Всё равно включить?"
           }
         }
       }
