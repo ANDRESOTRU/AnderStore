@@ -35,9 +35,13 @@ enum AnderVPNCoordinatorError: LocalizedError, Equatable {
     case coreUnavailable
     case couldNotOpen
     case connectionTimedOut
+    /// minimuxer answers only over Wi‑Fi; LocalDevVPN being connected does not help on LTE.
+    case wifiRequired
 
     var errorDescription: String? {
         switch self {
+        case .wifiRequired:
+            return "lc.vpn.wifiRequired".loc
         case .appMissing:
             return "lc.vpn.missing".loc
         case .pairingUnavailable:
@@ -69,7 +73,10 @@ final class AnderVPNCoordinator: ObservableObject {
 
     private struct DeviceProbe {
         var pairingState: String
-        var vpnConnected: Bool
+        var decision: AnderVPNProbeDecision
+
+        var vpnConnected: Bool { decision == .connected }
+        var pairingUsable: Bool { pairingState != "missing" && pairingState != "invalid" }
     }
 
     private static let handoffKey = "anderVPNHandoffV1"
@@ -221,18 +228,51 @@ final class AnderVPNCoordinator: ObservableObject {
             state = .inUse(leasePolicy.activeLeases)
         } catch {
             activationTask = nil
+            // The readiness card must show what the coordinator just learned, not a stale
+            // answer from before the trip to LocalDevVPN.
+            AnderState.shared.refreshDeviceStatus()
             throw error
         }
     }
 
+    /// Any error leaves a final state behind: before 1.6.29 a failed probe left the card on
+    /// «Включаем VPN…» forever and blocked every later foreground refresh.
     private func activate(reason: AnderVPNReason) async throws -> Bool {
+        do {
+            return try await activateSteps(reason: reason)
+        } catch {
+            clearHandoff()
+            switch state {
+            case .failed, .missingApp:
+                break
+            default:
+                let detail = (error as? AnderVPNCoordinatorError)?.localizedDescription
+                    ?? AnderVPNCoordinatorError.coreUnavailable.localizedDescription
+                state = .failed(detail)
+            }
+            throw error
+        }
+    }
+
+    private func activateSteps(reason: AnderVPNReason) async throws -> Bool {
         state = .checking
-        let initial = try await probeDevice()
-        if initial.vpnConnected {
+        var initial = try await probeDevice()
+        // Core (and minimuxer inside it) may just be starting. Opening LocalDevVPN now would
+        // bounce the user out of AnderStore — and later switch off a VPN they had turned on.
+        if initial.decision == .wait, initial.pairingUsable {
+            initial = try await settle(initial)
+        }
+        switch initial.decision {
+        case .connected:
             state = .connected
             return true
+        case .needsWiFi:
+            state = .failed(AnderVPNCoordinatorError.wifiRequired.localizedDescription)
+            throw AnderVPNCoordinatorError.wifiRequired
+        case .wait, .openVPN:
+            break
         }
-        guard initial.pairingState != "missing", initial.pairingState != "invalid" else {
+        guard initial.pairingUsable else {
             state = .failed(AnderVPNCoordinatorError.pairingUnavailable.localizedDescription)
             throw AnderVPNCoordinatorError.pairingUnavailable
         }
@@ -313,12 +353,27 @@ final class AnderVPNCoordinator: ObservableObject {
         }
     }
 
+    /// Polls while Core reports "still starting", up to about ten seconds.
+    private func settle(_ probe: DeviceProbe) async throws -> DeviceProbe {
+        var current = probe
+        for _ in 0..<13 where current.decision == .wait {
+            if Task.isCancelled { throw CancellationError() }
+            try await Task.sleep(nanoseconds: 750_000_000)
+            current = try await probeDevice()
+        }
+        return current
+    }
+
     private func waitForVPN(connected expected: Bool) async throws -> Bool {
         let attempts = 20
         for attempt in 0..<attempts {
             if Task.isCancelled { throw CancellationError() }
             let probe = try await probeDevice()
             if probe.vpnConnected == expected { return true }
+            // Turning the tunnel on cannot help without Wi‑Fi: say so instead of timing out.
+            if expected, probe.decision == .needsWiFi {
+                throw AnderVPNCoordinatorError.wifiRequired
+            }
             if attempt + 1 < attempts {
                 try await Task.sleep(nanoseconds: 750_000_000)
             }
@@ -339,8 +394,10 @@ final class AnderVPNCoordinator: ObservableObject {
                 }
                 continuation.resume(returning: DeviceProbe(
                     pairingState: response["pairingState"] as? String ?? "checking",
-                    vpnConnected: (response["vpnState"] as? String) == "connected"
-                        || response["vpnReady"] as? Bool == true
+                    decision: AnderVPNProbeDecision.decide(
+                        vpnState: response["vpnState"] as? String,
+                        vpnReady: response["vpnReady"] as? Bool == true
+                    )
                 ))
             }
             if !started {

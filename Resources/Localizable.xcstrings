@@ -1,6 +1,23 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "lc.account.errorCoreStopped" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The background part of AnderStore stopped. Try again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Фоновая часть AnderStore остановилась. Повторите попытку."
+          }
+        }
+      }
+    },
     "lc.appBanner.addToHomeScreen" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18755,6 +18772,23 @@
         }
       }
     },
+    "lc.readiness.needsWiFi" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect to Wi-Fi: renewing and updating work only over Wi-Fi."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключитесь к Wi-Fi: продление и обновление работают только через него."
+          }
+        }
+      }
+    },
     "lc.settings.about" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -32010,6 +32044,125 @@
         }
       }
     },
+    "lc.update.alreadyInstalled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %@ is already installed. Close AnderStore completely and open it again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Версия %@ уже установлена. Закройте AnderStore полностью и откройте снова."
+          }
+        }
+      }
+    },
+    "lc.update.blockedSignIn" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To update AnderStore here, sign in to your Apple ID below. If sign-in fails, update with the installer on your computer."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чтобы обновить AnderStore здесь, войдите в Apple ID ниже. Если вход не проходит — обновите через установщик на компьютере."
+          }
+        }
+      }
+    },
+    "lc.update.notTracked" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore Core does not see the installed AnderStore. Update with the installer on your computer."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AnderStore Core не видит установленный AnderStore. Обновите через установщик на компьютере."
+          }
+        }
+      }
+    },
+    "lc.update.stageCatalog" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking the AnderStore catalog…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверяем каталог AnderStore…"
+          }
+        }
+      }
+    },
+    "lc.update.stageVPN" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turning on VPN…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Включаем VPN…"
+          }
+        }
+      }
+    },
+    "lc.update.timedOut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The update did not finish: AnderStore Core stopped responding. Close AnderStore completely, open it again and retry over Wi-Fi."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновление не завершилось: AnderStore Core перестал отвечать. Закройте AnderStore полностью, откройте снова и повторите через Wi-Fi."
+          }
+        }
+      }
+    },
+    "lc.update.useInstaller" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update with the installer on your computer"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновить через установщик на компьютере"
+          }
+        }
+      }
+    },
     "lc.utils.initSigningError" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -32208,6 +32361,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要認證。"
+          }
+        }
+      }
+    },
+    "lc.vpn.wifiRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Wi-Fi. AnderStore renews and updates apps only over Wi-Fi — connect to Wi-Fi and try again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет Wi-Fi. AnderStore продлевает и обновляет приложения только через Wi-Fi — подключитесь к нему и повторите."
           }
         }
       }

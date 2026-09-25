@@ -193,4 +193,42 @@ final class AnderLogicTests: XCTestCase {
             now: expiration.addingTimeInterval(-72 * 60 * 60)
         ))
     }
+
+    /// 25 September 2026: on LTE minimuxer answered noConnection while LocalDevVPN was up,
+    /// and the app said «VPN не включился». No Wi-Fi is its own state now.
+    func testNoConnectionMeansNoWiFiNotNoVPN() {
+        let status = AnderDeviceStatusLogic.evaluate(pairing: .valid, minimuxerFailure: "noConnection")
+        XCTAssertEqual(status.vpn, .noWifi)
+        XCTAssertEqual(status.pairing, .valid)
+        XCTAssertFalse(status.ready)
+        XCTAssertEqual(AnderDeviceStatusLogic.evaluate(pairing: .valid, minimuxerFailure: "noVPN").vpn,
+                       .disconnected)
+    }
+
+    func testVPNProbeDecision() {
+        XCTAssertEqual(AnderVPNProbeDecision.decide(vpnState: "connected", vpnReady: false), .connected)
+        XCTAssertEqual(AnderVPNProbeDecision.decide(vpnState: "checking", vpnReady: true), .connected)
+        XCTAssertEqual(AnderVPNProbeDecision.decide(vpnState: "noWifi", vpnReady: false), .needsWiFi)
+        XCTAssertEqual(AnderVPNProbeDecision.decide(vpnState: "disconnected", vpnReady: false), .openVPN)
+        // Core still starting: wait instead of bouncing the user to LocalDevVPN.
+        XCTAssertEqual(AnderVPNProbeDecision.decide(vpnState: "checking", vpnReady: false), .wait)
+        XCTAssertEqual(AnderVPNProbeDecision.decide(vpnState: nil, vpnReady: false), .wait)
+    }
+
+    /// Self-update re-signs inside Core: no session or certificate — no update, and the
+    /// interface must say why (1.6.26 → 1.6.28 hung at 0 %).
+    func testUpdateBlocker() {
+        XCTAssertEqual(AnderUpdateBlocker.from(signedIn: false, hasCertificate: true), .signInRequired)
+        XCTAssertEqual(AnderUpdateBlocker.from(signedIn: false, hasCertificate: false), .signInRequired)
+        XCTAssertEqual(AnderUpdateBlocker.from(signedIn: true, hasCertificate: false), .certificateNotFound)
+        XCTAssertNil(AnderUpdateBlocker.from(signedIn: true, hasCertificate: true))
+    }
+
+    func testUpdateWatchdogEndsSilentOrEndlessUpdates() {
+        XCTAssertFalse(AnderUpdateWatchdogPolicy.hasExpired(startedAt: 0, lastEventAt: 0, now: 179))
+        XCTAssertTrue(AnderUpdateWatchdogPolicy.hasExpired(startedAt: 0, lastEventAt: 0, now: 180))
+        // Events keep coming, but the whole update is capped.
+        XCTAssertFalse(AnderUpdateWatchdogPolicy.hasExpired(startedAt: 0, lastEventAt: 800, now: 899))
+        XCTAssertTrue(AnderUpdateWatchdogPolicy.hasExpired(startedAt: 0, lastEventAt: 899, now: 900))
+    }
 }

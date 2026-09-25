@@ -43,7 +43,8 @@ final class AnderCoreBridge: NSObject {
         "appIDs.list",
         "appIDs.delete",
         "profiles.list",
-        "device.status"
+        "device.status",
+        "update.readiness"
     ]
 
     nonisolated(unsafe) private static var activeSignIn: XPCSignInHandler?
@@ -161,6 +162,9 @@ final class AnderCoreBridge: NSObject {
 
         case "device.status":
             deviceStatus(completion: completion)
+
+        case "update.readiness":
+            completion(updateReadiness(), nil)
 
         default:
             completion(nil, ["kind": "unsupportedCommand", "message": command])
@@ -299,10 +303,39 @@ final class AnderCoreBridge: NSObject {
         }
     }
 
+    /// Can Core re-sign AnderStore right now? Self-update is a re-sign inside Core: without an
+    /// Apple session and an active certificate the pipeline cannot finish, and the user saw a
+    /// progress bar stuck at 0 % instead of the reason (1.6.26 → 1.6.28, 25 September 2026).
+    /// Cheap, local checks only — no network.
+    private static func updateReadiness() -> [String: Any] {
+        let signedIn = AuthManager.shared.isAuthenticated
+        let hasCertificate = CertificateManager.shared.activeCertificate != nil
+        var result: [String: Any] = ["signedIn": signedIn, "hasCertificate": hasCertificate]
+        if !signedIn {
+            result["blocker"] = "signInRequired"
+        } else if !hasCertificate {
+            result["blocker"] = "certificateNotFound"
+        }
+        return result
+    }
+
     /// Updates AnderStore itself from the AnderStore source (store.andresot.uk/source.json).
     private static func updateSelf(expectedVersion: String?,
                                    onEvent: @escaping ([String: Any]) -> Void,
                                    completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+        // Fail fast with the real reason instead of hanging somewhere in the install pipeline.
+        let readiness = updateReadiness()
+        if let blocker = readiness["blocker"] as? String {
+            completion(nil, [
+                "kind": blocker,
+                "message": blocker == "signInRequired"
+                    ? "Sign in to Apple ID in AnderStore before updating"
+                    : "No active signing certificate is available in AnderStore Core"
+            ])
+            return
+        }
+
+        onEvent(["kind": "stage", "value": "catalog"])
         AppManager.shared.updateAllSources { sourceResult in
             DispatchQueue.main.async {
                 if case .failure(let error) = sourceResult {
@@ -343,6 +376,7 @@ final class AnderCoreBridge: NSObject {
                     return
                 }
 
+                onEvent(["kind": "stage", "value": "install"])
                 var observation: NSKeyValueObservation?
                 let updateProgress = AppManager.shared.update(installedApp,
                                                                to: targetVersion,
@@ -568,10 +602,24 @@ final class AnderCoreBridge: NSObject {
         }
     }
 
+    /// When minimuxer was last restarted from `device.status`. Boot starts it once; if that
+    /// start failed (no tunnel yet), nothing retried and every probe answered "not started".
+    nonisolated(unsafe) private static var lastMinimuxerRestart = Date.distantPast
+    private static let minimuxerRestartLock = NSLock()
+
+    private static func shouldRestartMinimuxer() -> Bool {
+        minimuxerRestartLock.lock()
+        defer { minimuxerRestartLock.unlock() }
+        guard Date().timeIntervalSince(lastMinimuxerRestart) > 20 else { return false }
+        lastMinimuxerRestart = Date()
+        return true
+    }
+
     private static func deviceStatus(completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
         Task {
             let pairingState: String
-            if let contents = PairingFileManager.shared.fetchPairingFile() {
+            let pairingContents = PairingFileManager.shared.fetchPairingFile()
+            if let contents = pairingContents {
                 do {
                     _ = try PairingFileParser.parse(content: contents)
                     pairingState = "valid"
@@ -594,7 +642,14 @@ final class AnderCoreBridge: NSObject {
                 return
             }
 
-            let readiness = await isMinimuxerReady()
+            var readiness = await isMinimuxerReady()
+            if case .failure(let error) = readiness,
+               case .notStarted = error,
+               let pairingContents,
+               shouldRestartMinimuxer() {
+                try? await AppBootManager.shared.startMinimuxer(pairingFile: pairingContents)
+                readiness = await isMinimuxerReady()
+            }
             switch readiness {
             case .success(let ready):
                 completion([
@@ -612,7 +667,11 @@ final class AnderCoreBridge: NSObject {
                 switch error {
                 case .invalidPairing:
                     status = ("invalid", "connected", "unreachable")
-                case .noVPN, .invalidVPN, .noConnection:
+                case .noConnection:
+                    // minimuxer checks for Wi‑Fi: on mobile data it fails here even with the
+                    // VPN connected. That is not a VPN problem and must not say so.
+                    status = ("valid", "noWifi", "unreachable")
+                case .noVPN, .invalidVPN:
                     status = ("valid", "disconnected", "unreachable")
                 case .notStarted, .pairingNotLoaded:
                     status = ("valid", "checking", "starting")
@@ -704,6 +763,9 @@ final class AnderCoreBridge: NSObject {
                 kind = "needsAuth"
             } else if text.contains("certificate") && (text.contains("limit") || text.contains("maximum")) {
                 kind = "certificateLimit"
+            } else if text.contains("active certificate is missing") {
+                // VerifyCertificateOperation / ResignAppOperation: Core has no certificate.
+                kind = "certificateNotFound"
             }
         }
 

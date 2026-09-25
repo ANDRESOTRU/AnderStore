@@ -44,6 +44,8 @@ enum AnderReadiness: Equatable {
     case needsCertificate
     case invalidCertificate
     case needsPairing
+    /// On mobile data: minimuxer needs Wi‑Fi even with LocalDevVPN connected.
+    case needsWiFi
     case needsVPN
     case needsJITLess
     case ready
@@ -92,6 +94,8 @@ final class AnderState: ObservableObject {
     @Published private(set) var certificateSyncState: AnderCertificateSyncState = .idle
     @Published private(set) var resignSummary: String?
     @Published private(set) var notificationPermissionDenied = false
+    /// Why the in-app self-update cannot run now; nil when it can (or Core did not answer).
+    @Published private(set) var updateBlocker: AnderUpdateBlocker?
 
     /// Expiration of AnderStore's own signature, read from the provisioning profile.
     @Published var signatureExpiration: Date?
@@ -208,6 +212,7 @@ final class AnderState: ObservableObject {
         scheduleSignatureReminder()
         refresh()
         refreshDeviceStatus()
+        refreshUpdateReadiness()
         validateLocalSetup()
         synchronizeCertificate { [weak self] _ in
             self?.autoRenewIfNeeded()
@@ -226,6 +231,19 @@ final class AnderState: ObservableObject {
     func refreshDeviceStatus() {
         deviceStatusGeneration += 1
         refreshDeviceStatus(generation: deviceStatusGeneration, attempt: 0)
+    }
+
+    /// Asks Core whether it could re-sign AnderStore now (session and certificate). Local
+    /// checks only, so it is cheap enough for every foreground and every update card.
+    func refreshUpdateReadiness() {
+        guard coreAvailable else { return }
+        _ = AnderAccountAPI.perform("update.readiness") { [weak self] response, _ in
+            guard let self, let response else { return }
+            self.updateBlocker = AnderUpdateBlocker.from(
+                signedIn: response["signedIn"] as? Bool ?? false,
+                hasCertificate: response["hasCertificate"] as? Bool ?? false
+            )
+        }
     }
 
     private func refreshDeviceStatus(generation: Int, attempt: Int) {
@@ -404,6 +422,7 @@ final class AnderState: ObservableObject {
         else if !certificateValid { readiness = .invalidCertificate }
         else if pairingState == .checking || vpnState == .checking || connectionState == .starting { readiness = .checking }
         else if pairingState == .missing || pairingState == .invalid { readiness = .needsPairing }
+        else if vpnState == .noWifi { readiness = .needsWiFi }
         else if vpnState == .disconnected || connectionState == .unreachable { readiness = .needsVPN }
         else if !jitLessReady { readiness = .needsJITLess }
         else { readiness = .ready }

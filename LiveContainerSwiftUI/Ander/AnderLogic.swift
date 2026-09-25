@@ -12,6 +12,8 @@ enum AnderVPNState: String, Codable {
     case checking
     case disconnected
     case connected
+    /// minimuxer needs Wi‑Fi: on mobile data it fails even with LocalDevVPN connected.
+    case noWifi
 }
 
 enum AnderConnectionState: String, Codable {
@@ -46,13 +48,67 @@ enum AnderDeviceStatusLogic {
             return AnderDeviceStatusValue(pairing: .valid, vpn: .connected, connection: .ready)
         case "invalidPairing":
             return AnderDeviceStatusValue(pairing: .invalid, vpn: .connected, connection: .unreachable)
-        case "noVPN", "invalidVPN", "noConnection":
+        case "noConnection":
+            return AnderDeviceStatusValue(pairing: .valid, vpn: .noWifi, connection: .unreachable)
+        case "noVPN", "invalidVPN":
             return AnderDeviceStatusValue(pairing: .valid, vpn: .disconnected, connection: .unreachable)
         case "notStarted", "pairingNotLoaded":
             return AnderDeviceStatusValue(pairing: .valid, vpn: .checking, connection: .starting)
         default:
             return AnderDeviceStatusValue(pairing: .valid, vpn: .checking, connection: .unreachable)
         }
+    }
+}
+
+/// What the VPN coordinator does with one `device.status` answer.
+enum AnderVPNProbeDecision: Equatable {
+    /// minimuxer answers — the tunnel is up.
+    case connected
+    /// Core or minimuxer is still starting: wait, opening LocalDevVPN would be premature.
+    case wait
+    /// No Wi‑Fi: LocalDevVPN cannot fix it, ask for Wi‑Fi instead.
+    case needsWiFi
+    /// The tunnel is really down: turn LocalDevVPN on.
+    case openVPN
+
+    static func decide(vpnState: String?, vpnReady: Bool) -> AnderVPNProbeDecision {
+        if vpnReady || vpnState == "connected" { return .connected }
+        switch vpnState {
+        case "noWifi":
+            return .needsWiFi
+        case "disconnected":
+            return .openVPN
+        default:
+            return .wait
+        }
+    }
+}
+
+/// Why AnderStore cannot update itself right now. Self-update re-signs the new IPA inside
+/// Core, which needs Core's own Apple session and certificate; without them the pipeline
+/// never finishes (1.6.26 → 1.6.28, 25 September 2026).
+enum AnderUpdateBlocker: String, Equatable {
+    case signInRequired
+    case certificateNotFound
+
+    static func from(signedIn: Bool, hasCertificate: Bool) -> AnderUpdateBlocker? {
+        if !signedIn { return .signInRequired }
+        if !hasCertificate { return .certificateNotFound }
+        return nil
+    }
+}
+
+/// When an update that stopped reporting progress is given up on instead of spinning forever.
+enum AnderUpdateWatchdogPolicy {
+    /// No progress or stage event for this long — Core is stuck or gone.
+    static let stallLimit: TimeInterval = 3 * 60
+    /// Even a slow download plus signing fits comfortably in this.
+    static let totalLimit: TimeInterval = 15 * 60
+
+    static func hasExpired(startedAt: TimeInterval,
+                           lastEventAt: TimeInterval,
+                           now: TimeInterval) -> Bool {
+        now - lastEventAt >= stallLimit || now - startedAt >= totalLimit
     }
 }
 

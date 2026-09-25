@@ -595,13 +595,19 @@ enum AnderAccountAPI {
 
     @discardableResult
     static func updateSelf(version: String,
+                           stage: @escaping (String) -> Void = { _ in },
                            progress: @escaping (Double) -> Void,
                            completion: @escaping (Bool?, AnderCoreFailure?) -> Void) -> Bool {
         perform("self.update",
                 params: ["version": version],
                 onEvent: { event in
-                    if event["kind"] as? String == "progress", let value = event["value"] as? Double {
-                        progress(value)
+                    switch event["kind"] as? String {
+                    case "progress":
+                        if let value = event["value"] as? Double { progress(value) }
+                    case "stage":
+                        if let value = event["value"] as? String { stage(value) }
+                    default:
+                        break
                     }
                 },
                 completion: { response, failure in
@@ -609,19 +615,86 @@ enum AnderAccountAPI {
                 })
     }
 
+    /// One answer per update: from Core, or from the watchdog — whichever comes first.
+    private final class UpdateWatch: @unchecked Sendable {
+        private let lock = NSLock()
+        private let startedAt = Date().timeIntervalSince1970
+        private var lastEventAt = Date().timeIntervalSince1970
+        private var finished = false
+
+        // lock()/unlock() rather than NSLock.withLock: the app still supports iOS 15.
+        func touch() {
+            lock.lock(); defer { lock.unlock() }
+            lastEventAt = Date().timeIntervalSince1970
+        }
+        var isFinished: Bool {
+            lock.lock(); defer { lock.unlock() }
+            return finished
+        }
+        func finishOnce() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            guard !finished else { return false }
+            finished = true
+            return true
+        }
+        func hasExpired() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            return AnderUpdateWatchdogPolicy.hasExpired(startedAt: startedAt,
+                                                        lastEventAt: lastEventAt,
+                                                        now: Date().timeIntervalSince1970)
+        }
+    }
+
+    /// Before 1.6.29 an update Core could not finish showed a bar stuck near 0 % forever:
+    /// nothing timed out. Now silence for three minutes (or 15 minutes in total) ends it.
     static func updateSelfAsync(version: String,
+                                stage: @escaping (String) -> Void = { _ in },
                                 progress: @escaping (Double) -> Void) async throws -> Bool {
-        try await withCheckedThrowingContinuation { continuation in
-            let started = updateSelf(version: version, progress: progress) { updated, failure in
+        let watch = UpdateWatch()
+        return try await withCheckedThrowingContinuation { continuation in
+            let finish: (Result<Bool, Error>) -> Void = { result in
+                guard watch.finishOnce() else { return }
+                continuation.resume(with: result)
+            }
+            let started = updateSelf(version: version,
+                                     stage: { value in watch.touch(); stage(value) },
+                                     progress: { value in watch.touch(); progress(value) }) { updated, failure in
                 if let failure {
-                    continuation.resume(throwing: failure)
+                    finish(.failure(failure))
                 } else {
-                    continuation.resume(returning: updated ?? false)
+                    finish(.success(updated ?? false))
                 }
             }
-            if !started {
-                continuation.resume(throwing: AnderVPNCoordinatorError.coreUnavailable)
+            guard started else {
+                finish(.failure(AnderVPNCoordinatorError.coreUnavailable))
+                return
             }
+            Task {
+                while !watch.isFinished {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    if watch.hasExpired() {
+                        finish(.failure(AnderCoreFailure(kind: "updateTimedOut",
+                                                         message: "AnderStore Core stopped reporting progress")))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Asks Core whether it could re-sign AnderStore right now.
+    static func updateBlocker() async -> AnderUpdateBlocker? {
+        await withCheckedContinuation { continuation in
+            let started = perform("update.readiness") { response, _ in
+                guard let response else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: AnderUpdateBlocker.from(
+                    signedIn: response["signedIn"] as? Bool ?? false,
+                    hasCertificate: response["hasCertificate"] as? Bool ?? false
+                ))
+            }
+            if !started { continuation.resume(returning: nil) }
         }
     }
 
@@ -718,6 +791,14 @@ enum AnderAccountAPI {
             return "lc.account.errorCertLimit".loc
         case "certificateNotFound":
             return "lc.certificateSync.notFound".loc
+        case "signInRequired":
+            return "lc.update.blockedSignIn".loc
+        case "notInstalled":
+            return "lc.update.notTracked".loc
+        case "updateTimedOut":
+            return "lc.update.timedOut".loc
+        case "terminated", "startTimeout":
+            return "lc.account.errorCoreStopped".loc
         case "invalidCertificate":
             return "lc.settings.invalidCertError".loc
         case "updateNotFound":
@@ -732,7 +813,7 @@ enum AnderAccountAPI {
             return "lc.account.errorAnisette".loc
         case "noVPN", "needsMinimuxer", "noConnection", "needsPairing", "noDevice", "timedOut":
             return "lc.account.errorVPN".loc
-        case "coreUnavailable", "noBundle", "notConnected", "terminated", "startTimeout", "unsupportedCommand", "unsupportedProtocol":
+        case "coreUnavailable", "noBundle", "notConnected", "unsupportedCommand", "unsupportedProtocol":
             return "lc.account.errorNoExtension".loc
         default:
             return friendly(failure.message)
@@ -806,6 +887,8 @@ struct AnderAccountView: View {
     @State private var cooldownTick = 0
     @State private var showSignInForm = false
     @State private var showSetupInstructions = false
+    /// What the running self-update is doing: vpn, catalog, install.
+    @State private var updateStage: String? = nil
 
     private var signedIn: Bool { state.account.signedIn }
     private var allDone: Bool { state.readiness == .ready }
@@ -924,6 +1007,8 @@ struct AnderAccountView: View {
                     ? "lc.readiness.pairingMissing"
                     : "lc.readiness.pairingInvalid"
                 return ("iphone.and.arrow.forward", .orange, key.loc, true)
+            case .needsWiFi:
+                return ("wifi.slash", .orange, "lc.readiness.needsWiFi".loc, false)
             case .needsVPN:
                 return ("shield.slash", .orange, "lc.readiness.needsVPN".loc, true)
             case .needsJITLess:
@@ -956,16 +1041,27 @@ struct AnderAccountView: View {
         }
         message = nil
         phase = .updating(0)
+        updateStage = nil
         Task { @MainActor in
+            // Core must be able to re-sign AnderStore; otherwise say why before touching VPN.
+            if let blocker = await AnderAccountAPI.updateBlocker() {
+                phase = .idle
+                state.refreshUpdateReadiness()
+                message = AnderAccountAPI.friendly(AnderCoreFailure(kind: blocker.rawValue, message: ""))
+                return
+            }
+            updateStage = "vpn"
             do {
                 let updated = try await vpnCoordinator.withVPN(reason: .selfUpdate) {
-                    try await AnderAccountAPI.updateSelfAsync(version: latestVersion) { value in
-                        phase = .updating(value)
-                    }
+                    try await AnderAccountAPI.updateSelfAsync(version: latestVersion,
+                                                              stage: { value in updateStage = value },
+                                                              progress: { value in phase = .updating(value) })
                 }
                 phase = .idle
+                updateStage = nil
                 if !updated {
-                    message = "lc.update.notInstalled".loc
+                    // Core already lists this version as installed.
+                    message = String(format: "lc.update.alreadyInstalled".loc, latestVersion)
                 } else {
                     state.markDeviceConnectionReady()
                     message = "lc.update.installed".loc
@@ -973,11 +1069,25 @@ struct AnderAccountView: View {
                 }
             } catch let failure as AnderCoreFailure {
                 phase = .idle
+                updateStage = nil
                 message = AnderAccountAPI.friendly(failure)
             } catch {
                 phase = .idle
+                updateStage = nil
                 message = error.localizedDescription
             }
+        }
+    }
+
+    /// Text under the progress bar: what is happening now, not a silent 0 %.
+    private var updateStageText: String {
+        switch updateStage {
+        case "vpn":
+            return "lc.update.stageVPN".loc
+        case "catalog":
+            return "lc.update.stageCatalog".loc
+        default:
+            return "lc.update.inProgress".loc
         }
     }
 
@@ -1096,7 +1206,7 @@ struct AnderAccountView: View {
                 .foregroundStyle(.secondary)
             if case .updating(let value) = phase {
                 ProgressView(value: value).tint(AnderTheme.accent)
-                Text("lc.update.inProgress".loc).font(.footnote).foregroundStyle(.secondary)
+                Text(updateStageText).font(.footnote).foregroundStyle(.secondary)
             } else {
                 Button(action: updateSelf) {
                     Label("lc.update.button".loc, systemImage: "arrow.down.circle.fill")
@@ -1107,13 +1217,27 @@ struct AnderAccountView: View {
                         .background(AnderTheme.accent)
                         .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
                 }
-                .disabled(busy || !state.certificateValid)
+                .disabled(busy || !state.certificateValid || state.updateBlocker != nil)
                 if !state.certificateValid {
                     Text("lc.readiness.needsCertificate".loc).font(.caption).foregroundStyle(.secondary)
+                } else if let blocker = state.updateBlocker {
+                    // The in-app update re-signs inside Core. Without Core's session or
+                    // certificate it cannot finish — say what to do instead of letting it spin.
+                    Text(blocker == .signInRequired
+                         ? "lc.update.blockedSignIn".loc
+                         : "lc.certificateSync.notFound".loc)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Link(destination: URL(string: "https://store.andresot.uk/download")!) {
+                        Label("lc.update.useInstaller".loc, systemImage: "desktopcomputer")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundColor(AnderTheme.accent)
+                    }
                 }
             }
         }
         .anderCard()
+        .onAppear { state.refreshUpdateReadiness() }
     }
 
     private func reload() {
