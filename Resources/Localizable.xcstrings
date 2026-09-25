@@ -18,6 +18,57 @@
         }
       }
     },
+    "lc.account.sessionExpiredForm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your sign-in has expired — enter your password again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вход устарел — введите пароль ещё раз."
+          }
+        }
+      }
+    },
+    "lc.account.signInFirst" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to your Apple ID below first."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сначала войдите в Apple ID ниже."
+          }
+        }
+      }
+    },
+    "lc.account.signInNeeded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to your Apple ID again — without it AnderStore cannot renew or update apps."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Войдите в Apple ID ещё раз — без этого AnderStore не может продлевать и обновлять приложения."
+          }
+        }
+      }
+    },
     "lc.appBanner.addToHomeScreen" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11337,6 +11388,40 @@
         }
       }
     },
+    "lc.common.errorDetails" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подробности: %@"
+          }
+        }
+      }
+    },
+    "lc.common.genericError" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Check Wi-Fi and try again. If it keeps happening, take a screenshot — the “Details” line helps to find the cause."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не получилось. Проверьте Wi-Fi и попробуйте ещё раз. Если ошибка повторяется, сделайте снимок экрана — строка «Подробности» поможет найти причину."
+          }
+        }
+      }
+    },
     "lc.common.install" : {
       "comment" : "lc.common.install",
       "extractionState" : "stale",
@@ -15420,6 +15505,23 @@
         }
       }
     },
+    "lc.device.advancedDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Certificates, App IDs, profiles, sign out"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сертификаты, App ID, профили, выход из Apple ID"
+          }
+        }
+      }
+    },
     "lc.download.downloading" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18772,6 +18874,40 @@
         }
       }
     },
+    "lc.portal.unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple did not respond. Pull the list down to try again, or sign in again."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple не ответила. Потяните список вниз, чтобы повторить, или войдите снова."
+          }
+        }
+      }
+    },
+    "lc.readiness.needsSignIn" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to your Apple ID again — without it AnderStore cannot renew your apps."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Войдите в Apple ID ещё раз — без этого AnderStore не сможет продлевать приложения."
+          }
+        }
+      }
+    },
     "lc.readiness.needsWiFi" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18785,6 +18921,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Подключитесь к Wi-Fi: продление и обновление работают только через него."
+          }
+        }
+      }
+    },
+    "lc.readiness.readyDetail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The signature renews by itself when 3 days are left — just open AnderStore on Wi-Fi. It turns the VPN on and off by itself."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подпись продлится сама, когда останется 3 дня, — просто откройте AnderStore на Wi-Fi. VPN он включит и выключит сам."
           }
         }
       }
@@ -33180,13 +33333,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A free Apple ID signs apps for 7 days. Turn on VPN and tap Refresh before it ends."
+            "value" : "A free Apple ID signs apps for 7 days. AnderStore renews the signature by itself when 3 days are left — just open it on Wi-Fi. You can also renew now."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Бесплатный Apple ID подписывает на 7 дней. Включите VPN и нажмите «Обновить» до окончания срока."
+            "value" : "Бесплатный Apple ID подписывает приложения на 7 дней. AnderStore продлевает подпись сам, когда остаётся 3 дня, — просто откройте его на Wi-Fi. Можно продлить и сейчас."
           }
         }
       }
@@ -34182,13 +34335,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Could not get an Apple verification token. Tap “Reset sign-in data” and sign in again."
+            "value" : "Apple did not issue a verification token. Check the internet connection and try again in a minute."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Не удалось получить проверочный токен Apple. Нажмите «Сбросить данные входа» и войдите заново."
+            "value" : "Apple не выдала проверочный токен. Проверьте интернет и попробуйте ещё раз через минуту."
           }
         }
       }
@@ -34254,8 +34407,8 @@
     "lc.account.sessionExpired" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your Apple session has expired. Sign in again to manage the Developer Portal." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сессия Apple истекла. Войдите снова для управления Developer Portal." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your Apple ID sign-in has expired. Sign in again — it takes a minute." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вход в Apple ID устарел. Войдите снова — это займёт минуту." } }
       }
     },
     "lc.account.signInAgain" : {
@@ -34271,13 +34424,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No connection to your iPhone. Open VPN, tap Connect and try again."
+            "value" : "No connection through the VPN. Make sure the iPhone is on Wi-Fi and try again."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Нет связи с iPhone. Откройте VPN, нажмите «Подключить» и попробуйте снова."
+            "value" : "Нет связи через VPN. Проверьте, что iPhone подключён к Wi-Fi, и попробуйте ещё раз."
           }
         }
       }
@@ -35156,13 +35309,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enable VPN to renew apps."
+            "value" : "Install the free VPN app from the App Store — AnderStore renews apps through it."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Включите VPN для продления приложений."
+            "value" : "Установите бесплатное приложение VPN из App Store — через него AnderStore продлевает приложения."
           }
         }
       }
@@ -35279,8 +35432,8 @@
     "lc.readiness.ready" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready to launch apps" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Готово к запуску приложений" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Everything works" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Всё работает" } }
       }
     },
     "lc.readiness.needsAccount" : {
@@ -35328,8 +35481,8 @@
     "lc.readiness.needsJITLess" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "JITLess validation has not completed successfully." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверка JITLess не завершилась успешно." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not check the certificate used to launch apps. Tap “Show setup steps”." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось проверить сертификат для запуска приложений. Нажмите «Показать настройку»." } }
       }
     },
     "lc.readiness.fix" : {

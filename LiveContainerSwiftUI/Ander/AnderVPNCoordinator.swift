@@ -86,7 +86,10 @@ final class AnderVPNCoordinator: ObservableObject {
 
     @Published private(set) var state: AnderVPNCoordinatorState = .idle
     @Published private(set) var lastReason: AnderVPNReason?
-    @Published private(set) var appInstalled = false
+    @Published private(set) var appInstalled = false {
+        // The readiness card treats a switched-off tunnel as fine only while the app exists.
+        didSet { AnderState.shared.vpnAppAvailabilityChanged(appInstalled) }
+    }
 
     private var leasePolicy = AnderVPNLeasePolicy()
     private var activationTask: Task<Bool, Error>?
@@ -95,6 +98,7 @@ final class AnderVPNCoordinator: ObservableObject {
 
     private init() {
         appInstalled = UIApplication.shared.canOpenURL(Self.appURL)
+        AnderState.shared.vpnAppAvailabilityChanged(appInstalled)
     }
 
     var needsAttention: Bool {
@@ -179,6 +183,12 @@ final class AnderVPNCoordinator: ObservableObject {
 
     func openStore() {
         awaitingInstallConfirmation = true
+        UIApplication.shared.open(Self.storeURL)
+    }
+
+    /// From the status card: no operation waits for the install, so there is nothing to
+    /// confirm on return — the next foreground just rechecks `appInstalled`.
+    func openStorePage() {
         UIApplication.shared.open(Self.storeURL)
     }
 

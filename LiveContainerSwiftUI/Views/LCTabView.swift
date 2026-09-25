@@ -780,75 +780,31 @@ enum AnderAccountAPI {
     }
 
     /// Turns a failure from Core into a short hint. The `kind` decides — the wording of the
-    /// technical message never does.
-    static func friendly(_ failure: AnderCoreFailure) -> String {
-        switch failure.kind {
-        case "cancelled":
-            return "lc.account.errorCancelled".loc
-        case "certificateRevoked":
-            return "lc.account.errorRevoked".loc
-        case "certificateLimit", "appIDLimit", "certificateExpired":
-            return "lc.account.errorCertLimit".loc
-        case "certificateNotFound":
-            return "lc.certificateSync.notFound".loc
-        case "signInRequired":
-            return "lc.update.blockedSignIn".loc
-        case "notInstalled":
-            return "lc.update.notTracked".loc
-        case "updateTimedOut":
-            return "lc.update.timedOut".loc
-        case "terminated", "startTimeout":
-            return "lc.account.errorCoreStopped".loc
-        case "invalidCertificate":
-            return "lc.settings.invalidCertError".loc
-        case "updateNotFound":
-            return "lc.update.notFound".loc
-        case "needsAuth":
-            return "lc.account.errorPassword".loc
-        case "sessionExpired":
-            return "lc.account.sessionExpired".loc
-        case "rateLimited":
-            return "lc.account.errorRateLimited".loc
-        case "adiNotProvisioned", "anisetteUnavailable":
-            return "lc.account.errorAnisette".loc
-        case "noVPN", "needsMinimuxer", "noConnection", "needsPairing", "noDevice", "timedOut":
-            return "lc.account.errorVPN".loc
-        case "coreUnavailable", "noBundle", "notConnected", "unsupportedCommand", "unsupportedProtocol":
-            return "lc.account.errorNoExtension".loc
-        default:
-            return friendly(failure.message)
+    /// technical message never does. Raw English from Core is never the headline: before
+    /// 1.6.30 the screen showed «You are not signed in.» as is.
+    static func friendly(_ failure: AnderCoreFailure,
+                         context: AnderErrorText.Context = .operation) -> String {
+        if let key = AnderErrorText.key(for: failure.kind, context: context)
+            ?? AnderErrorText.key(forMessage: failure.message, context: context) {
+            return key.loc
         }
+        return generic(details: failure.message)
     }
 
-    /// Fallback for messages Core could not classify.
-    static func friendly(_ error: String) -> String {
-        let lower = error.lowercased()
-        // Before the VPN branch below, whose "connect" would otherwise swallow this.
-        if lower.contains("-45061") || lower.contains("adiotprequest") || lower.contains("not provisioned") {
-            return "lc.account.errorAnisette".loc
-        }
-        if lower.contains("429") || lower.contains("too many requests") {
-            return "lc.account.errorTooMany".loc
-        }
-        if lower.contains("cancellationerror") || lower.contains("cancelled") || lower.contains("canceled") {
-            return "lc.account.errorCancelled".loc
-        }
-        if lower.contains("revoked") {
-            return "lc.account.errorRevoked".loc
-        }
-        if lower.contains("certificate") && (lower.contains("limit") || lower.contains("maximum")) {
-            return "lc.account.errorCertLimit".loc
-        }
-        if lower.contains("password") || lower.contains("incorrect") || lower.contains("-22406") {
-            return "lc.account.errorPassword".loc
-        }
-        if lower.contains("vpn") || lower.contains("connect") || lower.contains("timed out") || lower.contains("minimuxer") || lower.contains("heartbeat") {
-            return "lc.account.errorVPN".loc
-        }
-        if lower.contains("liveprocess") || lower.contains("extension") {
-            return "lc.account.errorNoExtension".loc
-        }
-        return error
+    /// For errors that are not Core failures (Swift or system errors).
+    static func friendlyError(_ error: Error) -> String {
+        if let failure = error as? AnderCoreFailure { return friendly(failure) }
+        // Already written for people (and translated) — keep the precise text.
+        if let vpnError = error as? AnderVPNCoordinatorError { return vpnError.localizedDescription }
+        if let key = AnderErrorText.key(forMessage: error.localizedDescription) { return key.loc }
+        return generic(details: error.localizedDescription)
+    }
+
+    /// What to do first, then the technical text for support.
+    static func generic(details: String) -> String {
+        let trimmed = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "lc.common.genericError".loc }
+        return "lc.common.genericError".loc + "\n\n" + String(format: "lc.common.errorDetails".loc, trimmed)
     }
 }
 
@@ -891,7 +847,9 @@ struct AnderAccountView: View {
     @State private var updateStage: String? = nil
 
     private var signedIn: Bool { state.account.signedIn }
-    private var allDone: Bool { state.readiness == .ready }
+    /// The step-by-step list is for the very first setup only; afterwards the status card
+    /// says everything, and a list of ticks next to red errors only confused people.
+    private var firstSetup: Bool { state.readiness == .needsAccount || state.readiness == .needsCertificate }
     private var busy: Bool {
         if case .idle = phase { return false }
         return true
@@ -899,10 +857,14 @@ struct AnderAccountView: View {
 
     var body: some View {
         NavigationView {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 16) {
                     header
-                    readinessCard
+                    statusCard {
+                        showSignInForm = true
+                        withAnimation { proxy.scrollTo("account", anchor: .top) }
+                    }
                     if vpnCoordinator.needsAttention || vpnCoordinator.state == .enabling || vpnCoordinator.state == .disabling {
                         vpnCard
                     }
@@ -911,8 +873,7 @@ struct AnderAccountView: View {
                     }
                     signatureCard
                     updateCheckRow
-                    accountCard
-                    managementCard
+                    accountCard.id("account")
                     if case .needsCode(let prompt) = phase {
                         codeCard(prompt: prompt)
                     }
@@ -950,11 +911,10 @@ struct AnderAccountView: View {
                         }
                         .anderCard()
                     }
-                    if allDone {
-                        doneCard
-                    } else {
+                    if firstSetup {
                         checklist
                     }
+                    advancedRow
                     Button {
                         showSetupInstructions = true
                     } label: {
@@ -963,6 +923,7 @@ struct AnderAccountView: View {
                     }
                 }
                 .padding(16)
+            }
             }
             .background(AnderTheme.background.ignoresSafeArea())
             .navigationTitle("lc.tabView.device".loc)
@@ -991,30 +952,41 @@ struct AnderAccountView: View {
         return false
     }
 
-    private var readinessCard: some View {
-        let presentation: (icon: String, color: Color, text: String, canFix: Bool) = {
+    private enum StatusAction {
+        case noAction
+        case signIn
+        case setup
+        case installVPN
+        case recheck
+    }
+
+    /// The first thing on the screen: what is going on and the one thing to do about it.
+    private func statusCard(onSignIn: @escaping () -> Void) -> some View {
+        let presentation: (icon: String, color: Color, text: String, detail: String?, action: StatusAction) = {
             switch state.readiness {
             case .checking:
-                return ("hourglass", .secondary, "lc.readiness.checking".loc, false)
+                return ("hourglass", .secondary, "lc.readiness.checking".loc, nil, .noAction)
             case .needsAccount:
-                return ("person.crop.circle.badge.exclamationmark", .orange, "lc.readiness.needsAccount".loc, false)
+                return ("person.crop.circle.badge.exclamationmark", .orange, "lc.readiness.needsAccount".loc, nil, .signIn)
             case .needsCertificate:
-                return ("key.slash", .orange, "lc.readiness.needsCertificate".loc, false)
+                return ("key.slash", .orange, "lc.readiness.needsCertificate".loc, nil, .noAction)
             case .invalidCertificate:
-                return ("xmark.seal", .red, "lc.readiness.invalidCertificate".loc, false)
+                return ("xmark.seal", .red, "lc.readiness.invalidCertificate".loc, nil, .noAction)
+            case .needsSignIn:
+                return ("person.crop.circle.badge.exclamationmark", .orange, "lc.readiness.needsSignIn".loc, nil, .signIn)
             case .needsPairing:
                 let key = state.pairingState == .missing
                     ? "lc.readiness.pairingMissing"
                     : "lc.readiness.pairingInvalid"
-                return ("iphone.and.arrow.forward", .orange, key.loc, true)
+                return ("iphone.and.arrow.forward", .orange, key.loc, nil, .setup)
             case .needsWiFi:
-                return ("wifi.slash", .orange, "lc.readiness.needsWiFi".loc, false)
+                return ("wifi.slash", .orange, "lc.readiness.needsWiFi".loc, nil, .recheck)
             case .needsVPN:
-                return ("shield.slash", .orange, "lc.readiness.needsVPN".loc, true)
+                return ("shield.slash", .orange, "lc.readiness.needsVPN".loc, nil, .installVPN)
             case .needsJITLess:
-                return ("bolt.slash", .orange, "lc.readiness.needsJITLess".loc, true)
+                return ("bolt.slash", .orange, "lc.readiness.needsJITLess".loc, nil, .setup)
             case .ready:
-                return ("checkmark.circle.fill", .green, "lc.readiness.ready".loc, false)
+                return ("checkmark.circle.fill", .green, "lc.readiness.ready".loc, "lc.readiness.readyDetail".loc, .noAction)
             }
         }()
         return HStack(alignment: .top, spacing: 12) {
@@ -1023,11 +995,25 @@ struct AnderAccountView: View {
                 .foregroundColor(presentation.color)
             VStack(alignment: .leading, spacing: 6) {
                 Text(presentation.text).font(.body.weight(.medium))
-                if presentation.canFix {
-                    Button("lc.readiness.fix".loc) { showSetupInstructions = true }
-                        .font(.footnote.weight(.semibold))
-                        .foregroundColor(AnderTheme.accent)
+                if let detail = presentation.detail {
+                    Text(detail).font(.footnote).foregroundStyle(.secondary)
                 }
+                Group {
+                    switch presentation.action {
+                    case .noAction:
+                        EmptyView()
+                    case .signIn:
+                        Button("lc.account.stepLoginAction".loc, action: onSignIn)
+                    case .setup:
+                        Button("lc.readiness.fix".loc) { showSetupInstructions = true }
+                    case .installVPN:
+                        Button("lc.vpn.install".loc) { vpnCoordinator.openStorePage() }
+                    case .recheck:
+                        Button("lc.vpn.retryCheck".loc) { state.refreshDeviceStatus() }
+                    }
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundColor(AnderTheme.accent)
             }
             Spacer()
         }
@@ -1070,11 +1056,14 @@ struct AnderAccountView: View {
             } catch let failure as AnderCoreFailure {
                 phase = .idle
                 updateStage = nil
+                if AnderErrorText.requiresSignIn(failure.kind) {
+                    state.markSignInNeeded()
+                }
                 message = AnderAccountAPI.friendly(failure)
             } catch {
                 phase = .idle
                 updateStage = nil
-                message = error.localizedDescription
+                message = AnderAccountAPI.friendlyError(error)
             }
         }
     }
@@ -1111,7 +1100,9 @@ struct AnderAccountView: View {
                     .font(.title2)
                     .foregroundColor(.orange)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("lc.vpn.requiredTitle".loc).font(.body.weight(.semibold))
+                    // While switching off the job is done — "VPN required" would read as a problem.
+                    Text(vpnCoordinator.state == .disabling ? "lc.common.done".loc : "lc.vpn.requiredTitle".loc)
+                        .font(.body.weight(.semibold))
                     switch vpnCoordinator.state {
                     case .missingApp:
                         Text("lc.vpn.missing".loc)
@@ -1311,7 +1302,7 @@ struct AnderAccountView: View {
             phase = .idle
             password = ""
             if let failure {
-                message = AnderAccountAPI.friendly(failure)
+                message = AnderAccountAPI.friendly(failure, context: .signIn)
                 lastFailureKind = failure.kind
                 // Пауза только там, где она осмысленна: 30 минут — это ограничение Apple,
                 // короткая задержка после неверного пароля бережёт от того же ограничения,
@@ -1327,9 +1318,11 @@ struct AnderAccountView: View {
                 return
             }
             lastFailureKind = nil
+            message = nil
             signInBlockedUntil = 0
             savedAppleID = account ?? appleID
             showSignInForm = false
+            state.didSignIn()
             state.synchronizeCertificate(force: true) { syncState in
                 if case .failed(let detail) = syncState { message = detail }
                 if case .missing = syncState { message = "lc.certificateSync.notFound".loc }
@@ -1353,18 +1346,10 @@ struct AnderAccountView: View {
             return
         }
         message = nil
-        state.renewSignatures(manual: true) { result in
+        // The outcome is shown once, under the button (renewalStatus). Before 1.6.30 it was
+        // also copied into a second card at the bottom of the screen.
+        state.renewSignatures(manual: true) { _ in
             expiration = state.signatureExpiration ?? AnderSignature.expirationDate()
-            switch result {
-            case .failed(let detail):
-                message = detail
-            case .needsVPN:
-                message = "lc.readiness.needsVPN".loc
-            case .complete:
-                message = nil
-            case .idle, .refreshing:
-                break
-            }
         }
     }
 
@@ -1433,6 +1418,9 @@ struct AnderAccountView: View {
                         .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusButton))
                 }
                 .disabled(busy || !signedIn)
+                if !signedIn, state.renewalState == .idle {
+                    Text("lc.account.signInFirst".loc).font(.caption).foregroundStyle(.secondary)
+                }
             }
             renewalStatus
         }
@@ -1442,7 +1430,8 @@ struct AnderAccountView: View {
     @ViewBuilder
     private var certificateSyncStatus: some View {
         switch state.certificateSyncState {
-        case .idle:
+        case .idle, .current:
+            // "Already up to date" is not news: say something only when it matters.
             EmptyView()
         case .syncing:
             HStack(spacing: 8) {
@@ -1453,8 +1442,6 @@ struct AnderAccountView: View {
             .foregroundStyle(.secondary)
         case .updated:
             Text("lc.certificateSync.updated".loc).font(.footnote).foregroundStyle(.green)
-        case .current:
-            Text("lc.certificateSync.current".loc).font(.footnote).foregroundStyle(.secondary)
         case .missing:
             Text("lc.certificateSync.notFound".loc).font(.footnote).foregroundStyle(.orange)
         case .failed(let detail):
@@ -1479,46 +1466,23 @@ struct AnderAccountView: View {
         }
     }
 
-    private var managementCard: some View {
-        VStack(spacing: 0) {
-            NavigationLink(destination: AnderCertificatesView()) {
-                managementRow("lc.device.certificates".loc, icon: "checkmark.seal")
-            }
-            Divider()
-            NavigationLink(destination: AnderAppIDsView()) {
-                managementRow("lc.device.appIDs".loc, icon: "app.badge")
-            }
-            Divider()
-            Text("lc.account.advanced".loc)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 10)
-            NavigationLink(destination: AnderProfilesView()) {
-                managementRow("lc.device.profiles".loc, icon: "doc.text")
-            }
-            if signedIn {
-                Divider()
-                Button(role: .destructive) {
-                    AnderDeviceManagementModel.shared.signOut()
-                    savedAppleID = ""
-                } label: {
-                    managementRow("lc.account.signOut".loc, icon: "rectangle.portrait.and.arrow.right")
+    /// Certificates, App IDs, profiles and sign-out are for people who know what they are.
+    /// One row here, the rest on its own screen — like «Для опытных» in Settings.
+    private var advancedRow: some View {
+        NavigationLink(destination: AnderDeviceAdvancedView()) {
+            HStack(spacing: 12) {
+                Image(systemName: "wrench.and.screwdriver").frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("lc.settings.advanced".loc)
+                    Text("lc.device.advancedDesc".loc).font(.caption).foregroundStyle(.secondary)
                 }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
             }
+            .foregroundColor(AnderTheme.accent)
+            .contentShape(Rectangle())
         }
         .anderCard()
-    }
-
-    private func managementRow(_ title: String, icon: String) -> some View {
-        HStack {
-            Image(systemName: icon).frame(width: 24)
-            Text(title)
-            Spacer()
-            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -1553,7 +1517,12 @@ struct AnderAccountView: View {
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 Text("lc.account.signInTitle".loc).font(.headline)
-                Text("lc.account.signInDesc".loc).font(.footnote).foregroundStyle(.secondary)
+                if !signedIn && !savedAppleID.isEmpty {
+                    // Was signed in before: say why the form is back instead of looking broken.
+                    Text("lc.account.sessionExpiredForm".loc).font(.footnote).foregroundStyle(.orange)
+                } else {
+                    Text("lc.account.signInDesc".loc).font(.footnote).foregroundStyle(.secondary)
+                }
                 TextField("lc.account.emailPlaceholder".loc, text: $email)
                     .textContentType(.username)
                     .keyboardType(.emailAddress)
@@ -1582,6 +1551,17 @@ struct AnderAccountView: View {
                     .clipShape(RoundedRectangle(cornerRadius: AnderTheme.radiusCard))
                 }
                 .disabled(busy || email.isEmpty || password.isEmpty || signInCooldown > 0)
+                if signedIn {
+                    // «Сменить» opened the form over a working sign-in: allow going back.
+                    Button("lc.common.cancel".loc) {
+                        password = ""
+                        showSignInForm = false
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(AnderTheme.accent)
+                    .frame(maxWidth: .infinity)
+                    .disabled(busy)
+                }
                 Text("lc.account.privacy".loc).font(.caption).foregroundStyle(.secondary)
             }
             .anderCard()
@@ -1661,18 +1641,6 @@ struct AnderAccountView: View {
             }
             Spacer()
         }
-    }
-
-    private var doneCard: some View {
-        HStack(spacing: 12) {
-            Text("🎉").font(.system(size: 30))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("lc.account.allDone".loc).font(.headline)
-                Text("lc.account.allDoneDesc".loc).font(.footnote).foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-        .anderCard()
     }
 }
 

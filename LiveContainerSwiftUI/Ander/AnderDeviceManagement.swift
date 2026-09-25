@@ -40,7 +40,11 @@ final class AnderDeviceManagementModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
     @Published private(set) var portalSessionState: AnderPortalSessionState = .unknown
+    /// Apple did not give a verification token. Shown as a banner with a way out: before
+    /// 1.6.30 an alert told the user to press a button that was not on this screen.
+    @Published private(set) var portalUnavailable = false
     @Published var showingReauthentication = false
+    @Published private(set) var signInDataReset = false
 
     private init() {}
 
@@ -60,9 +64,11 @@ final class AnderDeviceManagementModel: ObservableObject {
                                             isPortal: row["isPortal"] as? Bool ?? false)
             }
             if let failure = payload?["portalFailure"] as? [String: Any] {
+                // The list above still holds the certificates stored on this iPhone.
                 self?.handlePortalFailure(AnderCoreFailure(payload: failure))
             } else {
                 self?.portalSessionState = .ready
+                self?.portalUnavailable = false
             }
         }
     }
@@ -146,21 +152,49 @@ final class AnderDeviceManagementModel: ObservableObject {
         }
     }
 
+    /// Forgets the Apple ID and the saved verification data; the certificate and the apps
+    /// stay. The recovery for a broken Apple token state.
+    func resetSignInData() {
+        guard !isLoading else { return }
+        isLoading = true
+        errorMessage = nil
+        signInDataReset = false
+        let started = AnderAccountAPI.resetAnisette { [weak self] failure in
+            self?.isLoading = false
+            if let failure {
+                self?.errorMessage = AnderAccountAPI.friendly(failure)
+                return
+            }
+            UserDefaults.standard.removeObject(forKey: "anderAppleID")
+            UserDefaults.standard.set(0.0, forKey: "anderSignInBlockedUntil")
+            AnderState.shared.clearAccountAfterSignOut()
+            self?.portalUnavailable = false
+            self?.signInDataReset = true
+        }
+        if !started {
+            isLoading = false
+            errorMessage = "lc.account.errorNoExtension".loc
+        }
+    }
+
     func requestReauthentication() {
         showingReauthentication = true
     }
 
     func didReauthenticate() {
         portalSessionState = .ready
+        portalUnavailable = false
         showingReauthentication = false
-        AnderState.shared.invalidate()
+        AnderState.shared.didSignIn()
     }
 
     private func handlePortalFailure(_ failure: AnderCoreFailure) {
         switch failure.kind {
-        case "sessionExpired", "needsAuth":
+        case "sessionExpired", "needsAuth", "signInRequired":
             portalSessionState = .reauthRequired
-            AnderState.shared.invalidate()
+            AnderState.shared.markSignInNeeded()
+        case "adiNotProvisioned", "anisetteUnavailable":
+            portalUnavailable = true
         case "rateLimited":
             portalSessionState = .rateLimited
             UserDefaults.standard.set(Date().timeIntervalSince1970 + 30 * 60,
@@ -210,21 +244,29 @@ private struct AnderPortalSessionBanner: View {
     @ObservedObject var model: AnderDeviceManagementModel
 
     var body: some View {
-        if model.portalSessionState == .reauthRequired || model.portalSessionState == .rateLimited {
+        if model.portalSessionState == .reauthRequired || model.portalSessionState == .rateLimited
+            || model.portalUnavailable {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label(model.portalSessionState == .rateLimited
-                          ? "lc.account.errorRateLimited".loc
-                          : "lc.account.sessionExpired".loc,
-                          systemImage: "person.crop.circle.badge.exclamationmark")
+                    Label(text, systemImage: model.portalUnavailable && model.portalSessionState != .reauthRequired
+                          ? "exclamationmark.icloud"
+                          : "person.crop.circle.badge.exclamationmark")
                         .foregroundStyle(.orange)
-                    Button("lc.account.signInAgain".loc) {
-                        model.requestReauthentication()
+                    if model.portalSessionState != .rateLimited {
+                        Button("lc.account.signInAgain".loc) {
+                            model.requestReauthentication()
+                        }
                     }
                 }
                 .padding(.vertical, 4)
             }
         }
+    }
+
+    private var text: String {
+        if model.portalSessionState == .rateLimited { return "lc.account.errorRateLimited".loc }
+        if model.portalSessionState == .reauthRequired { return "lc.account.sessionExpired".loc }
+        return "lc.portal.unavailable".loc
     }
 }
 
@@ -315,7 +357,7 @@ private struct AnderReauthenticationView: View {
                 if failure.kind == "rateLimited" {
                     signInBlockedUntil = Date().timeIntervalSince1970 + 30 * 60
                 }
-                message = AnderAccountAPI.friendly(failure)
+                message = AnderAccountAPI.friendly(failure, context: .signIn)
                 return
             }
             signInBlockedUntil = 0
@@ -446,6 +488,57 @@ struct AnderCertificatesView: View {
             }
             Button("lc.common.cancel".loc, role: .cancel) { exportTarget = nil }
         } message: { Text("lc.certificates.exportPasswordHint".loc) }
+        .alert("lc.common.error".loc,
+               isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
+            Button("lc.common.ok".loc) { model.errorMessage = nil }
+        } message: { Text(model.errorMessage ?? "") }
+    }
+}
+
+/// «Для опытных» on the Device tab: everything a regular user never needs to touch.
+struct AnderDeviceAdvancedView: View {
+    @ObservedObject private var model = AnderDeviceManagementModel.shared
+    @ObservedObject private var state = AnderState.shared
+    @State private var confirmReset = false
+
+    var body: some View {
+        List {
+            Section {
+                NavigationLink(destination: AnderCertificatesView()) {
+                    Label("lc.device.certificates".loc, systemImage: "checkmark.seal")
+                }
+                NavigationLink(destination: AnderAppIDsView()) {
+                    Label("lc.device.appIDs".loc, systemImage: "app.badge")
+                }
+                NavigationLink(destination: AnderProfilesView()) {
+                    Label("lc.device.profiles".loc, systemImage: "doc.text")
+                }
+            } footer: {
+                Text("lc.settings.advancedDesc".loc)
+            }
+            Section {
+                Button("lc.account.resetSignInData".loc) { confirmReset = true }
+                    .disabled(model.isLoading)
+                if state.account.signedIn {
+                    Button(role: .destructive) {
+                        model.signOut()
+                    } label: {
+                        Label("lc.account.signOut".loc, systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                    .disabled(model.isLoading)
+                }
+            } footer: {
+                Text(model.signInDataReset ? "lc.account.resetSignInDataDone".loc : "lc.account.resetSignInDataDesc".loc)
+            }
+        }
+        .navigationTitle("lc.settings.advanced".loc)
+        .overlay { if model.isLoading { ProgressView() } }
+        .alert("lc.account.resetSignInData".loc, isPresented: $confirmReset) {
+            Button("lc.common.cancel".loc, role: .cancel) {}
+            Button("lc.common.continue".loc, role: .destructive) { model.resetSignInData() }
+        } message: {
+            Text("lc.account.resetSignInDataDesc".loc)
+        }
         .alert("lc.common.error".loc,
                isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("lc.common.ok".loc) { model.errorMessage = nil }

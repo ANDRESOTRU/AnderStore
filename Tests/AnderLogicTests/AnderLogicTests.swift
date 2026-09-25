@@ -224,6 +224,64 @@ final class AnderLogicTests: XCTestCase {
         XCTAssertNil(AnderUpdateBlocker.from(signedIn: true, hasCertificate: true))
     }
 
+    private func readiness(certificate: Bool = true,
+                           signedIn: Bool = true,
+                           pairing: AnderPairingState = .valid,
+                           vpn: AnderVPNState = .connected,
+                           vpnApp: Bool = true,
+                           jitLess: Bool = true) -> AnderReadiness {
+        AnderReadinessLogic.evaluate(AnderReadinessInput(
+            certificatePresent: certificate,
+            certificateValid: certificate,
+            signedIn: signedIn,
+            pairing: pairing,
+            vpn: vpn,
+            vpnAppInstalled: vpnApp,
+            jitLessReady: jitLess
+        ))
+    }
+
+    /// 25 September 2026: right after AnderStore switched its own VPN off, the screen asked
+    /// the user to turn the VPN on. A switched-off tunnel is fine while the app is installed.
+    func testSwitchedOffVPNIsNotAProblem() {
+        XCTAssertEqual(readiness(vpn: .disconnected), .ready)
+        XCTAssertEqual(readiness(vpn: .checking), .ready)
+        XCTAssertEqual(readiness(vpn: .disconnected, vpnApp: false), .needsVPN)
+        XCTAssertEqual(readiness(vpn: .connected, vpnApp: false), .ready)
+        XCTAssertEqual(readiness(vpn: .noWifi), .needsWiFi)
+    }
+
+    /// Apps launch with the certificate, but renewal needs the Apple ID: say so first.
+    func testCertificateWithoutSignInAsksToSignIn() {
+        XCTAssertEqual(readiness(signedIn: false), .needsSignIn)
+        XCTAssertEqual(readiness(certificate: false, signedIn: false), .needsAccount)
+        XCTAssertEqual(readiness(certificate: false, signedIn: true), .needsCertificate)
+        XCTAssertEqual(readiness(pairing: .checking), .checking)
+        XCTAssertEqual(readiness(pairing: .missing), .needsPairing)
+        XCTAssertEqual(readiness(jitLess: false), .needsJITLess)
+        XCTAssertEqual(readiness(), .ready)
+    }
+
+    /// «You are not signed in.» reached the screen as raw English. Every sign-in failure
+    /// now has one Russian text, and a wrong password is only "wrong" while signing in.
+    func testSignInFailuresHaveOneText() {
+        XCTAssertEqual(AnderErrorText.key(for: "signInRequired"), "lc.account.signInNeeded")
+        XCTAssertEqual(AnderErrorText.key(for: "sessionExpired"), "lc.account.signInNeeded")
+        XCTAssertEqual(AnderErrorText.key(for: "needsAuth"), "lc.account.signInNeeded")
+        XCTAssertEqual(AnderErrorText.key(for: "needsAuth", context: .signIn), "lc.account.errorPassword")
+        XCTAssertEqual(AnderErrorText.key(forMessage: "You are not signed in."), "lc.account.signInNeeded")
+        XCTAssertTrue(AnderErrorText.requiresSignIn("signInRequired"))
+        XCTAssertTrue(AnderErrorText.requiresSignIn("sessionExpired"))
+        XCTAssertFalse(AnderErrorText.requiresSignIn("noVPN"))
+    }
+
+    func testUnknownFailureFallsBackToGeneralText() {
+        XCTAssertNil(AnderErrorText.key(for: "unknown"))
+        XCTAssertNil(AnderErrorText.key(forMessage: "Something odd happened."))
+        XCTAssertEqual(AnderErrorText.key(for: "anisetteUnavailable"), "lc.account.errorAnisette")
+        XCTAssertEqual(AnderErrorText.key(forMessage: "ADIOTPRequest failed (-45061)"), "lc.account.errorAnisette")
+    }
+
     func testUpdateWatchdogEndsSilentOrEndlessUpdates() {
         XCTAssertFalse(AnderUpdateWatchdogPolicy.hasExpired(startedAt: 0, lastEventAt: 0, now: 179))
         XCTAssertTrue(AnderUpdateWatchdogPolicy.hasExpired(startedAt: 0, lastEventAt: 0, now: 180))

@@ -98,6 +98,147 @@ enum AnderUpdateBlocker: String, Equatable {
     }
 }
 
+/// What the «Устройство» screen says first: one state, one action.
+enum AnderReadiness: Equatable {
+    case checking
+    /// First setup: no certificate and no Apple ID yet.
+    case needsAccount
+    /// Signed in, but Core has not handed over a certificate yet.
+    case needsCertificate
+    case invalidCertificate
+    /// Apps launch, but renewing needs the Apple ID again.
+    case needsSignIn
+    case needsPairing
+    /// On mobile data: minimuxer needs Wi‑Fi even with the VPN connected.
+    case needsWiFi
+    /// The VPN app is not installed.
+    case needsVPN
+    case needsJITLess
+    case ready
+}
+
+struct AnderReadinessInput: Equatable {
+    var certificatePresent: Bool
+    var certificateValid: Bool
+    var signedIn: Bool
+    var pairing: AnderPairingState
+    var vpn: AnderVPNState
+    var vpnAppInstalled: Bool
+    var jitLessReady: Bool
+}
+
+enum AnderReadinessLogic {
+    /// A tunnel that is merely off is not a problem: AnderStore turns the VPN on for each
+    /// operation and off again afterwards. Before 1.6.30 the screen asked the user to turn on
+    /// the VPN right after AnderStore itself had turned it off (25 September 2026).
+    static func evaluate(_ input: AnderReadinessInput) -> AnderReadiness {
+        guard input.certificatePresent else {
+            return input.signedIn ? .needsCertificate : .needsAccount
+        }
+        if !input.certificateValid { return .invalidCertificate }
+        if !input.signedIn { return .needsSignIn }
+        switch input.pairing {
+        case .checking:
+            return .checking
+        case .missing, .invalid:
+            return .needsPairing
+        case .valid:
+            break
+        }
+        if input.vpn == .noWifi { return .needsWiFi }
+        if !input.vpnAppInstalled && input.vpn != .connected { return .needsVPN }
+        if !input.jitLessReady { return .needsJITLess }
+        return .ready
+    }
+}
+
+/// Which text the screen shows for a Core failure. The `kind` decides; nil means the kind is
+/// unknown and the screen shows a general text instead of Core's raw English message.
+enum AnderErrorText {
+    enum Context: Equatable {
+        /// The user has just typed a password: "needsAuth" means it was wrong.
+        case signIn
+        /// Renewal, update, portal: "needsAuth" means the stored sign-in no longer works.
+        case operation
+    }
+
+    static func key(for kind: String, context: Context = .operation) -> String? {
+        switch kind {
+        case "cancelled":
+            return "lc.account.errorCancelled"
+        case "certificateRevoked":
+            return "lc.account.errorRevoked"
+        case "certificateLimit", "appIDLimit", "certificateExpired":
+            return "lc.account.errorCertLimit"
+        case "certificateNotFound":
+            return "lc.certificateSync.notFound"
+        case "signInRequired", "sessionExpired":
+            return "lc.account.signInNeeded"
+        case "needsAuth":
+            return context == .signIn ? "lc.account.errorPassword" : "lc.account.signInNeeded"
+        case "notInstalled":
+            return "lc.update.notTracked"
+        case "updateTimedOut":
+            return "lc.update.timedOut"
+        case "terminated", "startTimeout":
+            return "lc.account.errorCoreStopped"
+        case "invalidCertificate":
+            return "lc.settings.invalidCertError"
+        case "updateNotFound":
+            return "lc.update.notFound"
+        case "rateLimited":
+            return "lc.account.errorRateLimited"
+        case "adiNotProvisioned", "anisetteUnavailable":
+            return "lc.account.errorAnisette"
+        case "noVPN", "needsMinimuxer", "noConnection", "needsPairing", "noDevice", "timedOut":
+            return "lc.account.errorVPN"
+        case "coreUnavailable", "noBundle", "notConnected", "unsupportedCommand", "unsupportedProtocol":
+            return "lc.account.errorNoExtension"
+        default:
+            return nil
+        }
+    }
+
+    /// Fallback for messages an older Core could not classify.
+    static func key(forMessage message: String, context: Context = .operation) -> String? {
+        let lower = message.lowercased()
+        // Before the VPN branch below, whose "connect" would otherwise swallow this.
+        if lower.contains("-45061") || lower.contains("adiotprequest") || lower.contains("not provisioned") {
+            return "lc.account.errorAnisette"
+        }
+        if lower.contains("not signed in") {
+            return "lc.account.signInNeeded"
+        }
+        if lower.contains("429") || lower.contains("too many requests") {
+            return "lc.account.errorTooMany"
+        }
+        if lower.contains("cancellationerror") || lower.contains("cancelled") || lower.contains("canceled") {
+            return "lc.account.errorCancelled"
+        }
+        if lower.contains("revoked") {
+            return "lc.account.errorRevoked"
+        }
+        if lower.contains("certificate") && (lower.contains("limit") || lower.contains("maximum")) {
+            return "lc.account.errorCertLimit"
+        }
+        if lower.contains("password") || lower.contains("incorrect") || lower.contains("-22406") {
+            return context == .signIn ? "lc.account.errorPassword" : "lc.account.signInNeeded"
+        }
+        if lower.contains("vpn") || lower.contains("connect") || lower.contains("timed out") || lower.contains("minimuxer") || lower.contains("heartbeat") {
+            return "lc.account.errorVPN"
+        }
+        if lower.contains("liveprocess") || lower.contains("extension") {
+            return "lc.account.errorNoExtension"
+        }
+        return nil
+    }
+
+    /// Failures after which the Apple ID card must turn back into the sign-in form.
+    static func requiresSignIn(_ kind: String) -> Bool {
+        kind == "signInRequired" || kind == "sessionExpired"
+    }
+}
+
 /// When an update that stopped reporting progress is given up on instead of spinning forever.
 enum AnderUpdateWatchdogPolicy {
     /// No progress or stage event for this long — Core is stuck or gone.

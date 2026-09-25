@@ -222,11 +222,22 @@ final class AnderCoreBridge: NSObject {
         }
     }
 
+    /// Signed in for real: tokens in the Keychain *and* an active team in Core's database.
+    /// Renewal resolves the team from the database. With tokens alone the screen said
+    /// "signed in" while renewal failed with "You are not signed in." (25 September 2026).
+    private static func isSignedIn(in context: NSManagedObjectContext) -> Bool {
+        guard AuthManager.shared.isAuthenticated else { return false }
+        // The database starts in the background at launch; until then an empty fetch would
+        // wrongly sign the user out on screen, so trust the tokens alone.
+        guard DatabaseManager.shared.isStarted else { return true }
+        return DatabaseManager.shared.activeTeam(in: context) != nil
+    }
+
     private static func accountStatus(completion: @escaping ([String: Any]) -> Void) {
         let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
         context.perform {
             var result: [String: Any] = [
-                "signedIn": AuthManager.shared.isAuthenticated,
+                "signedIn": isSignedIn(in: context),
                 "portalSessionState": AuthManager.shared.portalSessionState.rawValue
             ]
             if let appleID = DatabaseManager.shared.activeAccount(in: context)?.appleID {
@@ -249,7 +260,7 @@ final class AnderCoreBridge: NSObject {
 
             if fields.contains("account") {
                 var account: [String: Any] = [
-                    "signedIn": AuthManager.shared.isAuthenticated,
+                    "signedIn": isSignedIn(in: context),
                     "portalSessionState": AuthManager.shared.portalSessionState.rawValue
                 ]
                 if let appleID = DatabaseManager.shared.activeAccount(in: context)?.appleID {
@@ -308,7 +319,9 @@ final class AnderCoreBridge: NSObject {
     /// progress bar stuck at 0 % instead of the reason (1.6.26 → 1.6.28, 25 September 2026).
     /// Cheap, local checks only — no network.
     private static func updateReadiness() -> [String: Any] {
-        let signedIn = AuthManager.shared.isAuthenticated
+        var signedIn = false
+        let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
+        context.performAndWait { signedIn = isSignedIn(in: context) }
         let hasCertificate = CertificateManager.shared.activeCertificate != nil
         var result: [String: Any] = ["signedIn": signedIn, "hasCertificate": hasCertificate]
         if !signedIn {
@@ -710,7 +723,7 @@ final class AnderCoreBridge: NSObject {
 
         if error is CancellationError {
             kind = "cancelled"
-        } else if let operationError = error as? OperationError {
+        } else if let operationError = operationError(in: error) {
             switch operationError {
             case .noConnection, .notReachable, .connectionFailed, .serverNotFound:
                 kind = "noConnection"
@@ -723,7 +736,8 @@ final class AnderCoreBridge: NSObject {
             case .minimuxerNotStarted:
                 kind = "needsMinimuxer"
             case .notAuthenticated:
-                kind = "needsAuth"
+                // No stored session, not a wrong password: the user has to sign in again.
+                kind = "signInRequired"
             case .maximumAppIDLimitReached:
                 kind = "appIDLimit"
             case .certificateRevoked, .customCertificateRevoked:
@@ -766,6 +780,8 @@ final class AnderCoreBridge: NSObject {
             } else if text.contains("active certificate is missing") {
                 // VerifyCertificateOperation / ResignAppOperation: Core has no certificate.
                 kind = "certificateNotFound"
+            } else if text.contains("not signed in") {
+                kind = "signInRequired"
             }
         }
 
@@ -776,6 +792,18 @@ final class AnderCoreBridge: NSObject {
             "domain": nsError.domain,
             "code": nsError.code
         ]
+    }
+
+    /// The refresh pipeline wraps errors, so "You are not signed in." reached the screen as
+    /// raw English text. Look through a few levels of underlying errors for the real one.
+    private static func operationError(in error: Error) -> OperationError? {
+        var current: Error? = error
+        for _ in 0..<5 {
+            guard let candidate = current else { return nil }
+            if let operationError = candidate as? OperationError { return operationError }
+            current = (candidate as NSError).userInfo[NSUnderlyingErrorKey] as? Error
+        }
+        return nil
     }
 
     /// Portal commands use an existing token. If Apple rejects it, asking the user to re-enter
@@ -799,8 +827,9 @@ final class AnderCoreBridge: NSObject {
         case "needsAuth":
             AuthManager.shared.expirePortalSession()
             payload["kind"] = "sessionExpired"
-        case "sessionExpired":
+        case "sessionExpired", "signInRequired":
             AuthManager.shared.expirePortalSession()
+            payload["kind"] = "sessionExpired"
         case "rateLimited":
             AuthManager.shared.expirePortalSession(rateLimited: true)
         default:

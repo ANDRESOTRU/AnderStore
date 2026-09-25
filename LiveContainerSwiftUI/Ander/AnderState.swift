@@ -38,19 +38,6 @@ struct AnderCoreApp: Equatable, Identifiable {
     var id: String { bundleIdentifier }
 }
 
-enum AnderReadiness: Equatable {
-    case checking
-    case needsAccount
-    case needsCertificate
-    case invalidCertificate
-    case needsPairing
-    /// On mobile data: minimuxer needs Wi‑Fi even with LocalDevVPN connected.
-    case needsWiFi
-    case needsVPN
-    case needsJITLess
-    case ready
-}
-
 enum AnderRenewalState: Equatable {
     case idle
     case refreshing(Double)
@@ -96,6 +83,9 @@ final class AnderState: ObservableObject {
     @Published private(set) var notificationPermissionDenied = false
     /// Why the in-app self-update cannot run now; nil when it can (or Core did not answer).
     @Published private(set) var updateBlocker: AnderUpdateBlocker?
+    /// Reported by AnderVPNCoordinator. Optimistic until it does, so the screen does not
+    /// flash "install VPN" on launch.
+    private(set) var vpnAppInstalled = true
 
     /// Expiration of AnderStore's own signature, read from the provisioning profile.
     @Published var signatureExpiration: Date?
@@ -147,6 +137,30 @@ final class AnderState: ObservableObject {
         capturedAt = nil
         evaluateReadiness()
         LCUtils.appGroupUserDefault.removeObject(forKey: Self.cacheKey)
+    }
+
+    /// Core said the stored sign-in no longer works. The Apple ID card turns back into the
+    /// sign-in form at once instead of showing "signed in" next to "not signed in".
+    func markSignInNeeded() {
+        account.signedIn = false
+        account.portalSessionState = .reauthRequired
+        updateBlocker = .signInRequired
+        evaluateReadiness()
+        invalidate()
+    }
+
+    /// A successful sign-in: errors from before it are no longer true.
+    func didSignIn() {
+        if case .refreshing = renewalState {} else { renewalState = .idle }
+        certificateSyncState = .idle
+        invalidate()
+        refreshUpdateReadiness()
+    }
+
+    func vpnAppAvailabilityChanged(_ installed: Bool) {
+        guard vpnAppInstalled != installed else { return }
+        vpnAppInstalled = installed
+        evaluateReadiness()
     }
 
     func certificateDidChange() {
@@ -325,18 +339,21 @@ final class AnderState: ObservableObject {
             completion?(renewalState)
             return
         }
-        guard account.signedIn else {
-            renewalState = .failed("lc.account.sessionExpired".loc)
-            completion?(renewalState)
-            return
-        }
-
         let defaults = LCUtils.appGroupUserDefault
         let lastAttempt = defaults.double(forKey: "anderLastAutoRefresh")
         if !manual {
             guard let expiration = signatureExpiration,
                   AnderSignature.daysLeft(until: expiration) <= 3,
                   Date().timeIntervalSince1970 - lastAttempt > 6 * 3600 else { return }
+        }
+        guard account.signedIn else {
+            // Automatic renewal without a sign-in stays quiet: the main card already asks to
+            // sign in. Before 1.6.30 it left a red error on every launch, even after sign-in.
+            if manual {
+                renewalState = .failed("lc.account.signInFirst".loc)
+            }
+            completion?(renewalState)
+            return
         }
 
         certificateSyncState = .idle
@@ -353,17 +370,19 @@ final class AnderState: ObservableObject {
                     }
                 }
             } catch let failure as AnderCoreFailure {
-                self.renewalState = failure.kind == "noVPN" || failure.kind == "needsMinimuxer"
-                    ? .needsVPN : .failed(AnderAccountAPI.friendly(failure))
+                if AnderErrorText.requiresSignIn(failure.kind) {
+                    self.markSignInNeeded()
+                }
+                self.renewalState = .failed(AnderAccountAPI.friendly(failure))
                 completion?(self.renewalState)
                 return
             } catch let failure as AnderVPNCoordinatorError {
-                self.renewalState = failure == .appMissing || failure == .connectionTimedOut || failure == .couldNotOpen
-                    ? .needsVPN : .failed(failure.localizedDescription)
+                // Only a missing VPN app is "install VPN"; a VPN that did not come up says so.
+                self.renewalState = failure == .appMissing ? .needsVPN : .failed(failure.localizedDescription)
                 completion?(self.renewalState)
                 return
             } catch {
-                self.renewalState = .failed(error.localizedDescription)
+                self.renewalState = .failed(AnderAccountAPI.friendlyError(error))
                 completion?(self.renewalState)
                 return
             }
@@ -416,16 +435,15 @@ final class AnderState: ObservableObject {
     }
 
     private func evaluateReadiness() {
-        if !certificatePresent && LCSharedUtils.certificatePassword() == nil {
-            readiness = account.signedIn ? .needsCertificate : .needsAccount
-        }
-        else if !certificateValid { readiness = .invalidCertificate }
-        else if pairingState == .checking || vpnState == .checking || connectionState == .starting { readiness = .checking }
-        else if pairingState == .missing || pairingState == .invalid { readiness = .needsPairing }
-        else if vpnState == .noWifi { readiness = .needsWiFi }
-        else if vpnState == .disconnected || connectionState == .unreachable { readiness = .needsVPN }
-        else if !jitLessReady { readiness = .needsJITLess }
-        else { readiness = .ready }
+        readiness = AnderReadinessLogic.evaluate(AnderReadinessInput(
+            certificatePresent: certificatePresent || LCSharedUtils.certificatePassword() != nil,
+            certificateValid: certificateValid,
+            signedIn: account.signedIn,
+            pairing: pairingState,
+            vpn: vpnState,
+            vpnAppInstalled: vpnAppInstalled,
+            jitLessReady: jitLessReady
+        ))
     }
 
     // MARK: - Snapshot
