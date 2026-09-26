@@ -1003,7 +1003,10 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 }
             }
         } else if url.host == "livecontainer-launch" {
-            AnderHomeLaunchCoordinator.shared.receive(url)
+            let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "bundle-name" })?.value
+            if name == "builtinSideStore", let request = AnderHomeLaunchRequest(url: url) {
+                Task { await launchAppWithBundleId(bundleId: request.bundleName, container: request.container, urlStr: request.openURL, forceJIT: request.forceJIT) }
+            } else if name != "ui" { AnderHomeLaunchCoordinator.shared.receive(url) }
         } else if url.host == "install" {
             if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
                 var installUrl : String? = nil

@@ -8,6 +8,7 @@
 UIInterfaceOrientation LCOrientationLock = UIInterfaceOrientationUnknown;
 NSMutableArray<NSString*>* LCSupportedUrlSchemes = nil;
 BOOL launchURLProcessed = NO;
+static BOOL homeGuestLaunchPending = NO;
 
 __attribute__((constructor))
 static void UIKitGuestHooksInit() {
@@ -89,7 +90,9 @@ void LCShowSwitchAppConfirmation(NSURL *url, NSString* bundleId, bool isSharedAp
         __block BOOL anotherLCLaunched = false;
         forEachInstalledNotCurrentLC(YES, ^(NSString * scheme, BOOL* isBreak) {
             newUrlComp.scheme = scheme;
-            [UIApplication.sharedApplication openURL:newUrlComp.URL options:@{} completionHandler:nil];
+            [UIApplication.sharedApplication openURL:newUrlComp.URL options:@{} completionHandler:^(BOOL success) {
+                homeGuestLaunchPending = NO;
+            }];
             *isBreak = YES;
             anotherLCLaunched = YES;
             return;
@@ -313,11 +316,17 @@ void authenticateUser(void (^completion)(BOOL success, NSError *error)) {
 }
 
 void handleLiveContainerLaunch(NSString* bundleName, NSString* containerFolderName, NSURL* url) {
+    if (homeGuestLaunchPending) return;
     if (!bundleName.length || [bundleName containsString:@"/"] || [bundleName containsString:@"\\"] ||
         [bundleName isEqualToString:@".."] || [bundleName isEqualToString:@"."]) {
         LCShowAlert(@"lc.home.invalidLink".loc);
         return;
     }
+    BOOL plainIcon = YES;
+    for (NSURLQueryItem* item in [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO].queryItems) {
+        if ([item.name isEqualToString:@"open-url"] || [item.name isEqualToString:@"jit"]) plainIcon = NO;
+    }
+    if (plainIcon) homeGuestLaunchPending = YES;
     bool isSharedApp = false;
     NSBundle* bundle = [NSClassFromString(@"LCSharedUtils") findBundleWithBundleId:bundleName isSharedAppOut:&isSharedApp];
     NSDictionary* info = bundle ? [NSDictionary dictionaryWithContentsOfURL:[bundle URLForResource:@"LCAppInfo" withExtension:@"plist"]] : nil;
@@ -343,6 +352,7 @@ void handleLiveContainerLaunch(NSString* bundleName, NSString* containerFolderNa
             NSURLComponents* destination = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
             destination.scheme = running;
             [UIApplication.sharedApplication openURL:destination.URL options:@{} completionHandler:^(BOOL success) {
+                homeGuestLaunchPending = NO;
                 if (!success) LCShowAlert(@"lc.home.launchFailed".loc);
             }];
             return;
@@ -350,7 +360,9 @@ void handleLiveContainerLaunch(NSString* bundleName, NSString* containerFolderNa
         LCShowSwitchAppConfirmation(url, bundleName, isSharedApp);
     };
     if ([info[@"isLocked"] boolValue] || [info[@"isHidden"] boolValue]) {
-        authenticateUser(^(BOOL success, NSError* error) { if (success) launch(); });
+        authenticateUser(^(BOOL success, NSError* error) {
+            if (success) launch(); else homeGuestLaunchPending = NO;
+        });
     } else { launch(); }
 }
 

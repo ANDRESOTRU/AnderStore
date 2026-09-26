@@ -172,8 +172,8 @@ struct LCTabView: View {
     }
     
     func dispatchURL(url: URL) {
-        if url.host?.lowercased() == "livecontainer-launch",
-           URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "bundle-name" })?.value != "ui" {
+        let launchName = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "bundle-name" })?.value
+        if url.host?.lowercased() == "livecontainer-launch", launchName != "ui", launchName != "builtinSideStore" {
             homeLauncher.receive(url)
             return
         }
