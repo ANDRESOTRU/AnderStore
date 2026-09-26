@@ -292,6 +292,11 @@ final class AnderCoreBridge: NSObject {
                     for app in installed {
                         var entry: [String: Any] = [
                             "bundleIdentifier": app.bundleIdentifier,
+                            // The identifier the device actually carries, and a flag for the
+                            // record that is AnderStore itself. Only Core can tell which one
+                            // that is, so it says so rather than leaving the interface to guess.
+                            "resignedBundleIdentifier": app.resignedBundleIdentifier,
+                            "isSelf": app.bundleIdentifier == StoreApp.altstoreAppID,
                             "name": app.name,
                             "version": app.version,
                             "buildVersion": app.buildVersion,
@@ -816,22 +821,25 @@ final class AnderCoreBridge: NSObject {
             String(reflecting: error),
             nsError.userInfo[NSUnderlyingErrorKey].map { String(describing: $0) } ?? ""
         ].joined(separator: " ").lowercased()
-        if payload["kind"] as? String == "unknown",
-           diagnostic.contains("unauthorized") || diagnostic.contains("authentication") ||
-           diagnostic.contains("session") || diagnostic.contains("token") ||
-           diagnostic.contains("http 401") || diagnostic.contains("status code: 401") ||
-           diagnostic.contains("http 403") || diagnostic.contains("status code: 403") {
+        // Ending the session throws away the Apple ID password and both tokens, i.e. it signs
+        // the user out and stops automatic renewal. Only do that on proof that Apple rejected
+        // the credentials — a status code, not a word that happens to appear in a message.
+        // Before this, any failure whose text merely contained "session" or "token" logged the
+        // user out; listing App IDs could cost them their account.
+        let unauthorized = nsError.code == 401 || nsError.code == 403
+            || (nsError.userInfo["statusCode"] as? Int).map { $0 == 401 || $0 == 403 } == true
+            || diagnostic.contains("http 401") || diagnostic.contains("status code: 401")
+            || diagnostic.contains("http 403") || diagnostic.contains("status code: 403")
+        if payload["kind"] as? String == "unknown", unauthorized {
             payload["kind"] = "sessionExpired"
         }
         switch payload["kind"] as? String {
-        case "needsAuth":
-            AuthManager.shared.expirePortalSession()
-            payload["kind"] = "sessionExpired"
-        case "sessionExpired", "signInRequired":
+        case "needsAuth", "sessionExpired", "signInRequired":
             AuthManager.shared.expirePortalSession()
             payload["kind"] = "sessionExpired"
         case "rateLimited":
-            AuthManager.shared.expirePortalSession(rateLimited: true)
+            // Throttling passes on its own; keep the credentials.
+            AuthManager.shared.noteRateLimited()
         default:
             break
         }

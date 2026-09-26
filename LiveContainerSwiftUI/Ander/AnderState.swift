@@ -30,6 +30,10 @@ enum AnderPortalSessionState: String, Equatable {
 
 struct AnderCoreApp: Equatable, Identifiable {
     var bundleIdentifier: String
+    /// What the device actually has installed; differs when the app was resigned.
+    var resignedBundleIdentifier: String?
+    /// Core marks the record that is AnderStore itself — the interface cannot tell on its own.
+    var isSelf: Bool
     var name: String
     var version: String
     var expirationDate: Date?
@@ -43,7 +47,10 @@ enum AnderRenewalState: Equatable {
     case refreshing(Double)
     case needsVPN
     case failed(String)
-    case complete
+    /// Renewed; carries the new expiry to show.
+    case complete(String?)
+    /// The renewal reported success but the expiry did not move — say so instead of cheering.
+    case unchanged(String)
 }
 
 enum AnderCertificateSyncState: Equatable {
@@ -87,15 +94,47 @@ final class AnderState: ObservableObject {
     /// flash "install VPN" on launch.
     private(set) var vpnAppInstalled = true
 
-    /// Expiration of AnderStore's own signature, read from the provisioning profile.
+    /// Expiration of AnderStore's own signature.
     @Published var signatureExpiration: Date?
 
     private init() {
         loadCache()
-        signatureExpiration = AnderSignature.expirationDate()
+        signatureExpiration = resolvedSignatureExpiration()
+    }
+
+    /// The real remaining life of our own signature.
+    ///
+    /// Core is the source of truth: renewing downloads a freshly issued profile and records its
+    /// expiry. The `embedded.mobileprovision` inside our own bundle is frozen at install time —
+    /// renewing installs the new profile on the device, it never rewrites that file — so reading
+    /// it would show a number that only ever counts down. It stays as the fallback for the
+    /// moments before Core has answered.
+    private func resolvedSignatureExpiration() -> Date? {
+        if let fromCore = ownCoreRecord()?.expirationDate, fromCore > Date.distantPast {
+            return fromCore
+        }
+        return AnderSignature.expirationDate()
+    }
+
+    /// Which of Core's records is AnderStore itself. Core says so outright; the identifier
+    /// comparisons are only for records written by an older Core that did not send the flag.
+    private func ownCoreRecord() -> AnderCoreApp? {
+        if let flagged = coreApps.first(where: { $0.isSelf }) {
+            return flagged
+        }
+        if let running = Bundle.main.bundleIdentifier,
+           let match = coreApps.first(where: { $0.resignedBundleIdentifier == running || $0.bundleIdentifier == running }) {
+            return match
+        }
+        // Core keeps its historical SideStore identity for its own record; the interface uses
+        // LiveContainer's. Accept either.
+        let known = ["com.SideStore.SideStore", AnderUpdateChecker.bundleIdentifier]
+        return coreApps.first { known.contains($0.bundleIdentifier) }
     }
 
     private var deviceStatusGeneration = 0
+    /// Callers waiting for the snapshot currently in flight.
+    private var snapshotWaiters: [() -> Void] = []
 
     var coreAvailable: Bool { AnderAccountAPI.isAvailable }
 
@@ -107,28 +146,51 @@ final class AnderState: ObservableObject {
     // MARK: - Refresh
 
     /// Reads everything Core knows locally. No Apple API call, no VPN — safe to call on appear.
-    func refresh(force: Bool = false) {
-        guard coreAvailable, !isRefreshing, force || isStale else { return }
+    func refresh(force: Bool = false, completion: (() -> Void)? = nil) {
+        guard coreAvailable else {
+            completion?()
+            return
+        }
+        // Waiting, not starting a second snapshot: a caller that needs the fresh numbers must
+        // hear about the one already in flight, or it reads the old values and reports on them.
+        if isRefreshing {
+            if let completion { snapshotWaiters.append(completion) }
+            return
+        }
+        guard force || isStale else {
+            completion?()
+            return
+        }
         isRefreshing = true
+        if let completion { snapshotWaiters.append(completion) }
         let started = AnderAccountAPI.perform("snapshot",
                                               params: ["fields": ["account", "certificate", "apps"]]) { [weak self] response, _ in
             guard let self else { return }
             self.isRefreshing = false
-            guard let response else { return }
-            self.apply(response)
-            self.saveCache(response)
-            self.refreshDeviceStatus()
-            self.validateLocalSetup()
+            if let response {
+                self.apply(response)
+                self.saveCache(response)
+                self.refreshDeviceStatus()
+                self.validateLocalSetup()
+            }
+            self.drainSnapshotWaiters()
         }
         if !started {
             isRefreshing = false
+            drainSnapshotWaiters()
         }
+    }
+
+    private func drainSnapshotWaiters() {
+        let waiters = snapshotWaiters
+        snapshotWaiters.removeAll()
+        waiters.forEach { $0() }
     }
 
     /// Called after anything that changes the account, the certificate or the apps.
     func invalidate() {
         capturedAt = nil
-        signatureExpiration = AnderSignature.expirationDate()
+        signatureExpiration = resolvedSignatureExpiration()
         refresh(force: true)
     }
 
@@ -210,7 +272,7 @@ final class AnderState: ObservableObject {
             let changed = result == .updated
             self.certificatePresent = true
             self.certificateSyncState = changed ? .updated : .current
-            self.signatureExpiration = AnderSignature.expirationDate()
+            self.signatureExpiration = resolvedSignatureExpiration()
             self.validateLocalSetup(resignAfterSuccess: changed && resignAfterChange)
             self.capturedAt = nil
             self.refresh(force: true)
@@ -392,10 +454,18 @@ final class AnderState: ObservableObject {
                 guard let self else { return }
                 switch syncState {
                 case .updated, .current:
-                    self.signatureExpiration = AnderSignature.expirationDate()
-                    self.scheduleSignatureReminder()
-                    self.renewalState = .complete
-                    self.invalidate()
+                    // Ask Core for the new expiry before claiming anything: the date lives in
+                    // Core's record, and the copy in our bundle never changes on a renewal.
+                    let before = self.signatureExpiration
+                    self.capturedAt = nil
+                    self.refresh(force: true) { [weak self] in
+                        guard let self else { return }
+                        self.signatureExpiration = self.resolvedSignatureExpiration()
+                        self.scheduleSignatureReminder()
+                        self.renewalState = self.renewalOutcome(before: before)
+                        completion?(self.renewalState)
+                    }
+                    return
                 case .missing:
                     self.renewalState = .failed("lc.certificateSync.notFound".loc)
                 case .failed(let message):
@@ -406,6 +476,19 @@ final class AnderState: ObservableObject {
                 completion?(self.renewalState)
             }
         }
+    }
+
+    /// What to tell the user after a renewal that did not fail: the new date, or the plain fact
+    /// that it did not move. Saying "renewed" when nothing changed is how the old version lied.
+    private func renewalOutcome(before: Date?) -> AnderRenewalState {
+        guard let now = signatureExpiration else { return .complete(nil) }
+        if let before, now <= before {
+            return .unchanged("lc.account.renewNoChange".loc)
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return .complete(String(format: "lc.account.renewedUntil".loc, formatter.string(from: now)))
     }
 
     @MainActor
@@ -467,6 +550,8 @@ final class AnderState: ObservableObject {
                 guard let bundleIdentifier = entry["bundleIdentifier"] as? String,
                       let name = entry["name"] as? String else { return nil }
                 return AnderCoreApp(bundleIdentifier: bundleIdentifier,
+                                    resignedBundleIdentifier: entry["resignedBundleIdentifier"] as? String,
+                                    isSelf: entry["isSelf"] as? Bool ?? false,
                                     name: name,
                                     version: entry["version"] as? String ?? "",
                                     expirationDate: entry["expirationDate"] as? Date,
@@ -474,6 +559,9 @@ final class AnderState: ObservableObject {
             }
         }
         capturedAt = snapshot["capturedAt"] as? Date ?? Date()
+        // Core just told us what our own signature really expires; trust that over the frozen
+        // copy inside the bundle.
+        signatureExpiration = resolvedSignatureExpiration()
     }
 
     // MARK: - Cache
@@ -498,14 +586,23 @@ final class AnderState: ObservableObject {
             safe["certificate"] = ["present": certificate["present"] as? Bool ?? false]
         }
         if let apps = snapshot["apps"] as? [[String: Any]] {
-            safe["apps"] = apps.map { app in
-                [
+            safe["apps"] = apps.map { app -> [String: Any] in
+                var row: [String: Any] = [
                     "bundleIdentifier": app["bundleIdentifier"] as? String ?? "",
+                    "isSelf": app["isSelf"] as? Bool ?? false,
                     "name": app["name"] as? String ?? "",
                     "version": app["version"] as? String ?? "",
-                    "expirationDate": app["expirationDate"] as? Date ?? Date.distantPast,
                     "hasUpdate": app["hasUpdate"] as? Bool ?? false
                 ]
+                if let resigned = app["resignedBundleIdentifier"] as? String {
+                    row["resignedBundleIdentifier"] = resigned
+                }
+                // A missing date must stay missing: writing distantPast would read back as a
+                // real expiry and be shown as a signature that ran out in the year 1.
+                if let expiration = app["expirationDate"] as? Date {
+                    row["expirationDate"] = expiration
+                }
+                return row
             }
         }
         LCUtils.appGroupUserDefault.set(safe, forKey: Self.cacheKey)

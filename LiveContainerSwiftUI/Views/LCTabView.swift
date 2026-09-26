@@ -828,7 +828,6 @@ struct AnderAccountView: View {
 
     @ObservedObject private var state = AnderState.shared
     @ObservedObject private var vpnCoordinator = AnderVPNCoordinator.shared
-    @State private var expiration: Date? = nil
     @State private var coreAvailable = true
     @State private var phase: Phase = .idle
     @State private var email = ""
@@ -1233,7 +1232,6 @@ struct AnderAccountView: View {
 
     private func reload() {
         AnderUpdateChecker.checkIfNeeded()
-        expiration = AnderSignature.expirationDate()
         coreAvailable = AnderAccountAPI.isAvailable
         // Paints from the cached snapshot; only goes to Core when that snapshot is old.
         if !vpnCoordinator.handleForeground() {
@@ -1348,9 +1346,7 @@ struct AnderAccountView: View {
         message = nil
         // The outcome is shown once, under the button (renewalStatus). Before 1.6.30 it was
         // also copied into a second card at the bottom of the screen.
-        state.renewSignatures(manual: true) { _ in
-            expiration = state.signatureExpiration ?? AnderSignature.expirationDate()
-        }
+        state.renewSignatures(manual: true)
     }
 
     // MARK: Views
@@ -1372,7 +1368,7 @@ struct AnderAccountView: View {
     }
 
     private var signatureCard: some View {
-        let days = expiration.map { AnderSignature.daysLeft(until: $0) }
+        let days = state.signatureExpiration.map { AnderSignature.daysLeft(until: $0) }
         let color: Color = {
             guard let days else { return .secondary }
             if days <= 1 { return .red }
@@ -1461,8 +1457,10 @@ struct AnderAccountView: View {
             Text("lc.readiness.needsVPN".loc).font(.footnote).foregroundStyle(.orange)
         case .failed(let message):
             Text(message).font(.footnote).foregroundStyle(.red)
-        case .complete:
-            Text("lc.readiness.renewed".loc).font(.footnote).foregroundStyle(.green)
+        case .complete(let detail):
+            Text(detail ?? "lc.readiness.renewed".loc).font(.footnote).foregroundStyle(.green)
+        case .unchanged(let message):
+            Text(message).font(.footnote).foregroundStyle(.orange)
         }
     }
 

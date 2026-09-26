@@ -71,6 +71,14 @@ public final class AuthManager: @unchecked Sendable {
             cachedPortalSessionState = rateLimited ? .rateLimited : .reauthRequired
         }
     }
+
+    /// Apple throttling is not an invalid session. Record the state but keep the credentials,
+    /// so signing in again is not required once the window passes and renewal can resume.
+    public func noteRateLimited() {
+        portalStateLock.withLock {
+            cachedPortalSessionState = .rateLimited
+        }
+    }
     
     public var currentAppleID: String? {
         get { Keychain.shared.appleIDEmailAddress }

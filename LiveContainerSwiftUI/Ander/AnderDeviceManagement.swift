@@ -22,21 +22,12 @@ struct AnderAppIDInfo: Identifiable {
     var id: String { identifier }
 }
 
-struct AnderProfileInfo: Identifiable {
-    let name: String
-    let uuid: String
-    let identifier: String?
-    let bundleIdentifier: String?
-    var id: String { uuid }
-}
-
 @MainActor
 final class AnderDeviceManagementModel: ObservableObject {
     static let shared = AnderDeviceManagementModel()
 
     @Published private(set) var certificates: [AnderCertificateInfo] = []
     @Published private(set) var appIDs: [AnderAppIDInfo] = []
-    @Published private(set) var profiles: [AnderProfileInfo] = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
     @Published private(set) var portalSessionState: AnderPortalSessionState = .unknown
@@ -128,20 +119,6 @@ final class AnderDeviceManagementModel: ObservableObject {
     func delete(_ appID: AnderAppIDInfo) {
         run("appIDs.delete", params: ["identifier": appID.identifier]) { [weak self] _ in
             self?.loadAppIDs()
-        }
-    }
-
-    func loadProfiles() {
-        run("profiles.list") { [weak self] payload in
-            let rows = payload?["profiles"] as? [[String: Any]] ?? []
-            self?.profiles = rows.compactMap { row in
-                guard let name = row["name"] as? String,
-                      let uuid = row["uuid"] as? String else { return nil }
-                return AnderProfileInfo(name: name,
-                                        uuid: uuid,
-                                        identifier: row["identifier"] as? String,
-                                        bundleIdentifier: row["bundleIdentifier"] as? String)
-            }
         }
     }
 
@@ -510,9 +487,6 @@ struct AnderDeviceAdvancedView: View {
                 NavigationLink(destination: AnderAppIDsView()) {
                     Label("lc.device.appIDs".loc, systemImage: "app.badge")
                 }
-                NavigationLink(destination: AnderProfilesView()) {
-                    Label("lc.device.profiles".loc, systemImage: "doc.text")
-                }
             } footer: {
                 Text("lc.settings.advancedDesc".loc)
             }
@@ -566,6 +540,19 @@ struct AnderAppIDsView: View {
                     Button(role: .destructive) { deleteTarget = appID } label: { Label("lc.common.remove".loc, systemImage: "trash") }
                 }
             }
+            // An empty list used to look exactly like a broken screen. Say which it is.
+            if model.appIDs.isEmpty, !model.isLoading {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("lc.portal.emptyAppIDs".loc)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if AnderState.shared.account.isFreeAccount {
+                        Text("lc.portal.emptyAppIDsFree".loc)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
         .navigationTitle("lc.device.appIDs".loc)
         .overlay { if model.isLoading { ProgressView() } }
@@ -585,36 +572,6 @@ struct AnderAppIDsView: View {
             }
             Button("lc.common.cancel".loc, role: .cancel) { deleteTarget = nil }
         } message: { Text("lc.appIDs.deleteWarning".loc) }
-        .alert("lc.common.error".loc,
-               isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
-            Button("lc.common.ok".loc) { model.errorMessage = nil }
-        } message: { Text(model.errorMessage ?? "") }
-    }
-}
-
-struct AnderProfilesView: View {
-    @ObservedObject private var model = AnderDeviceManagementModel.shared
-    var body: some View {
-        List {
-            AnderPortalSessionBanner(model: model)
-            ForEach(model.profiles) { profile in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(profile.name).font(.headline)
-                    Text(profile.bundleIdentifier ?? profile.identifier ?? profile.uuid)
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .navigationTitle("lc.device.profiles".loc)
-        .overlay { if model.isLoading { ProgressView() } }
-        .onAppear { model.loadProfiles() }
-        .refreshable { model.loadProfiles() }
-        .sheet(isPresented: $model.showingReauthentication) {
-            AnderReauthenticationView {
-                model.didReauthenticate()
-                model.loadProfiles()
-            }
-        }
         .alert("lc.common.error".loc,
                isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("lc.common.ok".loc) { model.errorMessage = nil }

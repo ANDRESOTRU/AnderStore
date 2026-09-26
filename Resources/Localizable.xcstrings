@@ -34329,6 +34329,74 @@
         }
       }
     },
+    "lc.account.renewedUntil" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renewed until %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Продлено до %@"
+          }
+        }
+      }
+    },
+    "lc.account.renewNoChange" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renewal finished, but the date did not change. If it stays this way, reinstall AnderStore from the computer."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Продление завершилось, но дата не изменилась. Если так и останется — переустановите AnderStore с компьютера."
+          }
+        }
+      }
+    },
+    "lc.portal.emptyAppIDs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No App IDs are registered for this account."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Для этой учётной записи нет зарегистрированных App ID."
+          }
+        }
+      }
+    },
+    "lc.portal.emptyAppIDsFree" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A free Apple ID allows 10 App IDs a week; they appear here as apps are installed."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бесплатный Apple ID даёт 10 App ID в неделю — они появятся здесь по мере установки приложений."
+          }
+        }
+      }
+    },
     "lc.account.errorAnisette" : {
       "extractionState" : "manual",
       "localizations" : {
