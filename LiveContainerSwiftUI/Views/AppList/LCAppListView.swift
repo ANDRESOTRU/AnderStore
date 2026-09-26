@@ -121,6 +121,9 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     @State private var isViewAppeared = false
     @State private var updateSummary: String?
     @State private var isUpdatingAll = false
+    /// Long-press → uninstall, confirmed in two steps like the old banner did.
+    @State private var uninstallTarget: LCAppModel?
+    @State private var uninstallDataTarget: LCAppModel?
     @State private var shortcutOffer: LCAppModel?
     
     @ObservedObject var searchContext: SearchContext = SearchContext()
@@ -203,10 +206,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                             .font(.system(.title2).bold())
                         Spacer()
                     }
-                    ForEach(filteredApps, id: \.self) { app in
-                        LCAppBanner(appModel: app, delegate: self)
-                    }
-                    .transition(.scale)
+                    appGrid(filteredApps)
                 }
                 .padding()
                 .animation(searchContext.isTyping ? nil : .easeInOut, value: filteredApps)
@@ -221,10 +221,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                                     Spacer()
                                 }
                                 
-                                ForEach(filteredHiddenApps, id: \.self) { app in
-                                    LCAppBanner(appModel: app, delegate: self)
-                                }
-                                .transition(.scale)
+                                appGrid(filteredHiddenApps)
                                 
                             }
                             .padding()
@@ -243,11 +240,17 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                                     .font(.system(.title2).bold())
                                 Spacer()
                             }
-                            ForEach(filteredHiddenApps, id: \.self) { app in
+                            Group {
                                 if sharedModel.isHiddenAppUnlocked {
-                                    LCAppBanner(appModel: app, delegate: self)
+                                    appGrid(filteredHiddenApps)
                                 } else {
-                                    LCAppSkeletonBanner()
+                                    LazyVGrid(columns: Self.gridColumns, spacing: 16) {
+                                        // The cell takes no model, so nothing about a hidden app
+                                        // reaches the screen before authentication.
+                                        ForEach(filteredHiddenApps, id: \.self) { _ in
+                                            LCAppGridSkeletonCell()
+                                        }
+                                    }
                                 }
                             }
                             .animation(.easeInOut, value: sharedModel.isHiddenAppUnlocked)
@@ -372,6 +375,39 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             Button("lc.common.ok".loc) { updateSummary = nil }
         } message: {
             Text(updateSummary ?? "")
+        }
+        .alert("lc.appBanner.confirmUninstallTitle".loc,
+               isPresented: Binding(get: { uninstallTarget != nil },
+                                    set: { if !$0 { uninstallTarget = nil } })) {
+            Button("lc.appBanner.uninstall".loc, role: .destructive) {
+                guard let app = uninstallTarget else { return }
+                uninstallTarget = nil
+                // Offer to take the data too, but only when there is any.
+                if app.appInfo.containers.isEmpty {
+                    performUninstall(app, removeData: false)
+                } else {
+                    uninstallDataTarget = app
+                }
+            }
+            Button("lc.common.cancel".loc, role: .cancel) { uninstallTarget = nil }
+        } message: {
+            Text("lc.appBanner.confirmUninstallMsg %@".localizeWithFormat(uninstallTarget?.appInfo.displayName() ?? ""))
+        }
+        .alert("lc.appBanner.deleteDataTitle".loc,
+               isPresented: Binding(get: { uninstallDataTarget != nil },
+                                    set: { if !$0 { uninstallDataTarget = nil } })) {
+            Button("lc.common.delete".loc, role: .destructive) {
+                guard let app = uninstallDataTarget else { return }
+                uninstallDataTarget = nil
+                performUninstall(app, removeData: true)
+            }
+            Button("lc.common.no".loc, role: .cancel) {
+                guard let app = uninstallDataTarget else { return }
+                uninstallDataTarget = nil
+                performUninstall(app, removeData: false)
+            }
+        } message: {
+            Text("lc.appBanner.deleteDataMsg %@".localizeWithFormat(uninstallDataTarget?.appInfo.displayName() ?? ""))
         }
         .alert("lc.shortcut.offerTitle".loc,
                isPresented: Binding(get: { shortcutOffer != nil },
@@ -710,6 +746,84 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
 
     func installFromPlist(urlStr: String) async {
         await installer.install(urlString: urlStr)
+    }
+
+    // MARK: - Grid
+
+    /// Four across on a phone, more on a wider screen — the home screen's own behaviour.
+    private static let gridColumns = [GridItem(.adaptive(minimum: 74, maximum: 96), spacing: 14)]
+
+    @ViewBuilder
+    private func appGrid(_ apps: [LCAppModel]) -> some View {
+        LazyVGrid(columns: Self.gridColumns, spacing: 16) {
+            ForEach(apps, id: \.self) { app in
+                LCAppGridCell(model: app,
+                              darkModeIcon: darkModeIcon,
+                              hasUpdate: appsWithUpdates.contains(app),
+                              launch: { multitask in Task { await launch(app, multitask: multitask) } },
+                              selectContainer: { container in app.uiSelectedContainer = container },
+                              openDataFolder: { openDataFolder(for: app) },
+                              addToHomeScreen: { Task { await createHomeScreenShortcut(for: app) } },
+                              openSettings: { openNavigationView(view: AnyView(LCAppSettingsView(model: app))) },
+                              uninstall: { uninstallTarget = app })
+            }
+        }
+    }
+
+    /// Which apps the updates section above is offering, so the grid can mark them.
+    private var appsWithUpdates: Set<LCAppModel> {
+        Set(updateCandidates.map { $0.installedApp })
+    }
+
+    /// The same sequence the old banner used: ask for Face ID when the app is locked, then
+    /// launch. Returning to an already open multitask window is handled inside runApp.
+    @MainActor
+    private func launch(_ app: LCAppModel, multitask: Bool? = nil) async {
+        if app.appInfo.isLocked && !sharedModel.isHiddenAppUnlocked {
+            do {
+                if !(try await LCUtils.authenticateUser()) { return }
+            } catch {
+                errorInfo = error.localizedDescription
+                errorShow = true
+                return
+            }
+        }
+        do {
+            try await app.runApp(multitask: multitask)
+        } catch {
+            errorInfo = error.localizedDescription
+            errorShow = true
+        }
+    }
+
+    private func openDataFolder(for app: LCAppModel) {
+        guard let folder = app.uiSelectedContainer?.folderName,
+              let url = URL(string: "shareddocuments://\(LCPath.dataPath.path)/\(folder)") else { return }
+        UIApplication.shared.open(url)
+    }
+
+    /// Ported from the banner: remove the bundle, then offer to remove the data with it.
+    @MainActor
+    private func performUninstall(_ app: LCAppModel, removeData: Bool) {
+        let appInfo = app.appInfo
+        let containers = appInfo.containers
+        do {
+            guard let bundlePath = appInfo.bundlePath() else { throw CocoaError(.fileNoSuchFile) }
+            let fileManager = FileManager.default
+            try fileManager.removeItem(atPath: bundlePath)
+            removeApp(app: app)
+            if removeData {
+                for container in containers {
+                    let dataUUID = container.folderName
+                    try? fileManager.removeItem(at: LCPath.dataPath.appendingPathComponent(dataUUID))
+                    LCUtils.removeAppKeychain(dataUUID: dataUUID)
+                    DataManager.shared.model.appDataFolderNames.removeAll { $0 == dataUUID }
+                }
+            }
+        } catch {
+            errorInfo = error.localizedDescription
+            errorShow = true
+        }
     }
 
     func removeApp(app: LCAppModel) {
