@@ -11,7 +11,7 @@ import UIKit
 
 protocol LCAppBannerDelegate {
     func removeApp(app: LCAppModel)
-    func installMdm(data: Data)
+    func showHomeShortcut(app: LCAppModel)
     func openNavigationView(view: AnyView)
     func promptForGeneratedIconStyle() async -> GeneratedIconStyle?
 }

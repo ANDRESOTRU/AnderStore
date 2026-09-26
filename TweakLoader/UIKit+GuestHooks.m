@@ -79,6 +79,8 @@ void forEachInstalledNotCurrentLC(BOOL isFree, void (^block)(NSString* scheme, B
     }
 }
 
+void LCShowAlert(NSString* message);
+
 void LCShowSwitchAppConfirmation(NSURL *url, NSString* bundleId, bool isSharedApp) {
     NSURLComponents* newUrlComp = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
     
@@ -97,8 +99,18 @@ void LCShowSwitchAppConfirmation(NSURL *url, NSString* bundleId, bool isSharedAp
         }
     }
     
-    // if LCSwitchAppWithoutAsking is enabled we directly open the app in current lc
-    if ([NSUserDefaults.lcUserDefaults boolForKey:@"LCSwitchAppWithoutAsking"]) {
+    // Ordinary home-screen icons are an explicit request to open this installed app.
+    BOOL homeIcon = [newUrlComp.host isEqualToString:@"livecontainer-launch"];
+    NSString* targetName = nil;
+    for (NSURLQueryItem* item in newUrlComp.queryItems) {
+        if ([item.name isEqualToString:@"bundle-name"]) targetName = item.value;
+        if ([item.name isEqualToString:@"open-url"] || [item.name isEqualToString:@"jit"]) homeIcon = NO;
+    }
+    homeIcon = homeIcon && targetName.length > 0 && ![targetName isEqualToString:@"ui"] &&
+        ![targetName isEqualToString:@"builtinSideStore"];
+    // Authentication and target validation happen before this function is called.
+    if (homeIcon || [NSUserDefaults.lcUserDefaults boolForKey:@"LCSwitchAppWithoutAsking"]) {
+        [NSUserDefaults.lcUserDefaults setBool:NO forKey:@"LCOpenSideStore"];
         [NSClassFromString(@"LCSharedUtils") launchToGuestAppWithURL:url];
         return;
     }
@@ -301,46 +313,45 @@ void authenticateUser(void (^completion)(BOOL success, NSError *error)) {
 }
 
 void handleLiveContainerLaunch(NSString* bundleName, NSString* containerFolderName, NSURL* url) {
-    // check if there are other LCs is running this app
-        NSString* runningLC = [NSClassFromString(@"LCSharedUtils") getContainerUsingLCSchemeWithFolderName:containerFolderName];
-        // the app is running in an lc, that lc is not me, also is not my avatar
-        if(runningLC) {
-            if([runningLC hasSuffix:@"liveprocess"]) {
-                runningLC = runningLC.stringByDeletingPathExtension;
+    if (!bundleName.length || [bundleName containsString:@"/"] || [bundleName containsString:@"\\"] ||
+        [bundleName isEqualToString:@".."] || [bundleName isEqualToString:@"."]) {
+        LCShowAlert(@"lc.home.invalidLink".loc);
+        return;
+    }
+    bool isSharedApp = false;
+    NSBundle* bundle = [NSClassFromString(@"LCSharedUtils") findBundleWithBundleId:bundleName isSharedAppOut:&isSharedApp];
+    NSDictionary* info = bundle ? [NSDictionary dictionaryWithContentsOfURL:[bundle URLForResource:@"LCAppInfo" withExtension:@"plist"]] : nil;
+    if (!bundle || ([info[@"isHidden"] boolValue] && [NSUserDefaults.lcSharedDefaults boolForKey:@"LCStrictHiding"])) {
+        [NSClassFromString(@"LCSharedUtils") routeHomeLaunchToUI:url];
+        return;
+    }
+    void (^launch)(void) = ^{
+        if (containerFolderName.length) {
+            BOOL found = [containerFolderName isEqualToString:info[@"LCDataUUID"]];
+            for (NSDictionary* container in info[@"LCContainers"]) {
+                if ([container[@"folderName"] isEqualToString:containerFolderName]) found = YES;
             }
-            NSString* urlStr = [NSString stringWithFormat:@"%@://livecontainer-launch?bundle-name=%@&container-folder-name=%@", runningLC, bundleName, containerFolderName];
-            [UIApplication.sharedApplication openURL:[NSURL URLWithString:urlStr] options:@{} completionHandler:nil];
+            if (!found) {
+                // The app-wide coordinator asks before falling back to the default data.
+                [NSClassFromString(@"LCSharedUtils") routeHomeLaunchToUI:url];
+                return;
+            }
+        }
+        NSString* running = [NSClassFromString(@"LCSharedUtils") getContainerUsingLCSchemeWithFolderName:containerFolderName];
+        if ([running hasSuffix:@"liveprocess"]) running = running.stringByDeletingPathExtension;
+        if (running && ![running isEqualToString:NSUserDefaults.lcAppUrlScheme]) {
+            NSURLComponents* destination = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
+            destination.scheme = running;
+            [UIApplication.sharedApplication openURL:destination.URL options:@{} completionHandler:^(BOOL success) {
+                if (!success) LCShowAlert(@"lc.home.launchFailed".loc);
+            }];
             return;
         }
-        
-        bool isSharedApp = false;
-        NSBundle* bundle = [NSClassFromString(@"LCSharedUtils") findBundleWithBundleId: bundleName isSharedAppOut:&isSharedApp];
-        NSDictionary* lcAppInfo;
-        if(bundle) {
-            lcAppInfo = [NSDictionary dictionaryWithContentsOfURL:[bundle URLForResource:@"LCAppInfo" withExtension:@"plist"]];
-        }
-        
-        if(!bundle || ([lcAppInfo[@"isHidden"] boolValue] && [NSUserDefaults.lcSharedDefaults boolForKey:@"LCStrictHiding"])) {
-            LCShowAppNotFoundAlert(bundleName);
-        } else if ([lcAppInfo[@"isLocked"] boolValue]) {
-            // need authentication
-            authenticateUser(^(BOOL success, NSError *error) {
-                if (success) {
-                    LCShowSwitchAppConfirmation(url, bundleName, isSharedApp);
-                } else {
-                    if ([error.domain isEqualToString:LAErrorDomain]) {
-                        if (error.code != LAErrorUserCancel) {
-                            NSLog(@"[LC] Authentication Error: %@", error.localizedDescription);
-                        }
-                    } else {
-                        NSLog(@"[LC] Authentication Error: %@", error.localizedDescription);
-                    }
-                }
-            });
-        } else {
-            LCShowSwitchAppConfirmation(url, bundleName, isSharedApp);
-        }
-    
+        LCShowSwitchAppConfirmation(url, bundleName, isSharedApp);
+    };
+    if ([info[@"isLocked"] boolValue] || [info[@"isHidden"] boolValue]) {
+        authenticateUser(^(BOOL success, NSError* error) { if (success) launch(); });
+    } else { launch(); }
 }
 
 BOOL shouldRedirectOpenURLToHost(NSURL* url) {

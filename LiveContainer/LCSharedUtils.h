@@ -8,6 +8,7 @@
 + (BOOL)launchToGuestAppWithClassicMode:(NSUInteger)classicMode;
 + (void)openUpdatedAnderStoreWithBundleIdentifier:(NSString *)bundleIdentifier completion:(void (^)(BOOL success))completion;
 + (BOOL)launchToGuestAppWithURL:(NSURL *)url;
++ (void)routeHomeLaunchToUI:(NSURL *)url;
 + (void)setWebPageUrlForNextLaunch:(NSString*)urlString;
 + (BOOL)isLCSchemeInUse:(NSString*)lc;
 + (NSString*)getContainerUsingLCSchemeWithFolderName:(NSString*)folderName;

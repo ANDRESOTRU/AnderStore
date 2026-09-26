@@ -98,6 +98,7 @@ struct LCAppGridCell: View {
     let uninstall: () -> Void
 
     @State private var icon: UIImage?
+    @AppStorage("anderAdvancedFunctions", store: LCUtils.appGroupUserDefault) private var advanced = false
 
     private var displayName: String {
         model.appInfo.displayName() ?? model.displayName
@@ -123,7 +124,7 @@ struct LCAppGridCell: View {
                            alignment: .top)
                 // The container decides which data launches, so it is the one extra fact worth
                 // the space — and only when there is a choice to be wrong about.
-                if model.uiContainers.count > 1, let container = model.uiSelectedContainer {
+                if advanced, model.uiContainers.count > 1, let container = model.uiSelectedContainer {
                     Text(container.name)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -216,7 +217,7 @@ struct LCAppGridCell: View {
     private var menuItems: some View {
         // Listed flat rather than in a submenu: a nested Menu inside a context menu is
         // unreliable on iOS 15, which this app still supports.
-        if model.uiContainers.count > 1 {
+        if advanced, model.uiContainers.count > 1 {
             ForEach(model.uiContainers, id: \.folderName) { container in
                 Button {
                     selectContainer(container)
@@ -229,14 +230,14 @@ struct LCAppGridCell: View {
                 }
             }
         }
-        if #available(iOS 16.0, *), !model.appInfo.is32bit {
+        if advanced, #available(iOS 16.0, *), !model.appInfo.is32bit {
             Button {
                 launch(!model.shouldLaunchInMultitaskMode)
             } label: {
                 Label("lc.appBanner.multitask".loc, systemImage: "macwindow.on.rectangle")
             }
         }
-        if !model.uiIsShared, model.uiSelectedContainer != nil {
+        if advanced, !model.uiIsShared, model.uiSelectedContainer != nil {
             Button {
                 openDataFolder()
             } label: {
@@ -248,10 +249,12 @@ struct LCAppGridCell: View {
         } label: {
             Label("lc.appBanner.addToHomeScreen".loc, systemImage: "plus.app")
         }
-        Button {
-            openSettings()
-        } label: {
-            Label("lc.tabView.settings".loc, systemImage: "gearshape")
+        if advanced {
+            Button {
+                openSettings()
+            } label: {
+                Label("lc.tabView.settings".loc, systemImage: "gearshape")
+            }
         }
         if !model.uiIsShared {
             Button(role: .destructive) {

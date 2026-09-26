@@ -3,6 +3,53 @@ import XCTest
 @testable import AnderLogic
 
 final class AnderLogicTests: XCTestCase {
+    func testHomeLaunchParsesLegacyIconAndForwardedParameters() throws {
+        let url = try XCTUnwrap(AnderHomeShortcutURL.make(bundleName: "Приложение Test.app", containerFolderName: "Данные & 1"))
+        let request = try XCTUnwrap(AnderHomeLaunchRequest(url: url))
+        XCTAssertEqual(request.bundleName, "Приложение Test.app")
+        XCTAssertEqual(request.container, "Данные & 1")
+        XCTAssertNil(request.openURL)
+        var components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let target = "testapp://open?name=Привет"
+        components.queryItems?.append(URLQueryItem(name: "open-url", value: Data(target.utf8).base64EncodedString()))
+        components.queryItems?.append(URLQueryItem(name: "jit", value: "false"))
+        let forwarded = try XCTUnwrap(AnderHomeLaunchRequest(url: XCTUnwrap(components.url)))
+        XCTAssertEqual(forwarded.openURL, target)
+        XCTAssertEqual(forwarded.forceJIT, false)
+    }
+
+    func testHomeLaunchRejectsAmbiguousAndInvalidLinks() {
+        for value in ["livecontainer://livecontainer-launch", "livecontainer://livecontainer-launch?bundle-name=ui",
+                      "livecontainer://livecontainer-launch?bundle-name=../A.app",
+                      "livecontainer://livecontainer-launch?bundle-name=A.app&bundle-name=B.app",
+                      "livecontainer://livecontainer-launch?bundle-name=A.app&container-folder-name=../data",
+                      "livecontainer://livecontainer-launch?bundle-name=A.app&open-url=bad",
+                      "livecontainer://livecontainer-launch?bundle-name=A.app&jit=maybe"] {
+            XCTAssertNil(URL(string: value).flatMap { AnderHomeLaunchRequest(url: $0) }, value)
+        }
+    }
+
+    func testHomeLaunchGateSerializesAndAllowsRetryOnlyAfterFinish() throws {
+        let first = try XCTUnwrap(URL(string: "livecontainer://livecontainer-launch?bundle-name=A.app").flatMap { AnderHomeLaunchRequest(url: $0) })
+        let second = try XCTUnwrap(URL(string: "livecontainer://livecontainer-launch?bundle-name=B.app").flatMap { AnderHomeLaunchRequest(url: $0) })
+        var gate = AnderHomeLaunchGate()
+        XCTAssertTrue(gate.begin(first))
+        XCTAssertFalse(gate.begin(first))
+        XCTAssertFalse(gate.begin(second))
+        XCTAssertEqual(gate.active, first)
+        gate.finish()
+        XCTAssertTrue(gate.begin(second))
+    }
+
+    func testProfileHTTPServesOnlyExactDownloadPath() {
+        let path = "/random/AnderStoreShortcut.mobileconfig"
+        XCTAssertTrue(AnderShortcutHTTP.accepts("GET \(path) HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", path: path))
+        for request in ["GET / HTTP/1.1\r\n\r\n", "POST \(path) HTTP/1.1\r\n\r\n",
+                        "GET \(path)?other HTTP/1.1\r\n\r\n", "GET /random/../file HTTP/1.1\r\n\r\n"] {
+            XCTAssertFalse(AnderShortcutHTTP.accepts(request, path: path))
+        }
+    }
+
     func testSelfUpdateUsesRealStagesAndClearsPreviousStageProgress() {
         var state = AnderSelfUpdateState(status: .running, lastAdvanceAt: 10)
         state.receive(["operationID": "a", "kind": "stage", "value": "download"], now: 20)

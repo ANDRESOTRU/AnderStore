@@ -1,6 +1,551 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "lc.tools.enabled": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Advanced functions"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Расширенные функции"
+        }
+      }
+    }
+  },
+  "lc.tools.description": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Show technical app actions and manual installation tools."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Показывать технические действия с приложениями и ручную установку."
+        }
+      }
+    }
+  },
+  "lc.tools.title": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "App tools"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Инструменты приложений"
+        }
+      }
+    }
+  },
+  "lc.tools.sort": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "App order"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Порядок приложений"
+        }
+      }
+    }
+  },
+  "lc.home.opening": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Opening…"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Открываем…"
+        }
+      }
+    }
+  },
+  "lc.home.preparing": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Preparing the app…"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Подготавливаем приложение…"
+        }
+      }
+    }
+  },
+  "lc.home.invalidLink": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "This shortcut is invalid. Add the app to the Home Screen again from AnderStore."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Этот значок содержит неправильную ссылку. Добавьте приложение на экран «Домой» ещё раз из AnderStore."
+        }
+      }
+    }
+  },
+  "lc.home.missingApp": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "This app is no longer installed. Find it in the store, install it and add a new Home Screen icon."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Это приложение больше не установлено. Найдите его в магазине, установите и добавьте новый значок на экран «Домой»."
+        }
+      }
+    }
+  },
+  "lc.home.missingContainer": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "The data selected for this icon is no longer available. Open the app with its main data instead?"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Данные, выбранные для этого значка, больше недоступны. Открыть приложение с основными данными?"
+        }
+      }
+    }
+  },
+  "lc.home.containerTitle": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Choose app data"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Выберите данные приложения"
+        }
+      }
+    }
+  },
+  "lc.home.openDefault": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Open main data"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Открыть основные данные"
+        }
+      }
+    }
+  },
+  "lc.home.busy": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Another app operation is still running. Wait for it to finish, then tap the icon again."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Другая операция с приложением ещё выполняется. Дождитесь её завершения и нажмите значок ещё раз."
+        }
+      }
+    }
+  },
+  "lc.home.authentication": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "The app was not unlocked. Tap its icon again and confirm with Face ID, Touch ID or your passcode."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Приложение не разблокировано. Нажмите значок ещё раз и подтвердите доступ через Face ID, Touch ID или код-пароль."
+        }
+      }
+    }
+  },
+  "lc.home.launchFailed": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "The app could not open. Refresh its signature in Device and try again. If it still fails, reinstall the app from the store."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Не удалось открыть приложение. Обновите подпись во вкладке «Устройство» и повторите запуск. Если это не поможет, переустановите приложение из магазина."
+        }
+      }
+    }
+  },
+  "lc.home.goStore": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Go to store"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Перейти в магазин"
+        }
+      }
+    }
+  },
+  "lc.home.goDevice": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Open Device"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Открыть «Устройство»"
+        }
+      }
+    }
+  },
+  "lc.home.switchTitle": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Close other apps?"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Закрыть другие приложения?"
+        }
+      }
+    }
+  },
+  "lc.home.switchMessage": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "This app needs the other running apps to close before it can open."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Для запуска этого приложения нужно закрыть другие работающие приложения."
+        }
+      }
+    }
+  },
+  "lc.shortcut.explanation": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "The icon opens this app through AnderStore. iPhone will ask you to confirm installation of a profile that adds the icon."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Значок открывает это приложение через AnderStore. iPhone попросит подтвердить установку профиля, который добавит значок."
+        }
+      }
+    }
+  },
+  "lc.shortcut.step1": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Tap Start adding, then allow the profile download."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Нажмите «Начать добавление» и разрешите загрузку профиля."
+        }
+      }
+    }
+  },
+  "lc.shortcut.step2": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Open iPhone Settings and tap Profile Downloaded."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Откройте настройки iPhone и нажмите «Профиль загружен»."
+        }
+      }
+    }
+  },
+  "lc.shortcut.step3": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Tap Install and follow the iPhone instructions. You may need your passcode."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Нажмите «Установить» и выполните указания iPhone. Может понадобиться код-пароль."
+        }
+      }
+    }
+  },
+  "lc.shortcut.step4": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Go to the Home Screen and tap the new app icon."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Вернитесь на экран «Домой» и нажмите новый значок приложения."
+        }
+      }
+    }
+  },
+  "lc.shortcut.begin": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Start adding"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Начать добавление"
+        }
+      }
+    }
+  },
+  "lc.shortcut.downloadAgain": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Download profile again"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Загрузить профиль ещё раз"
+        }
+      }
+    }
+  },
+  "lc.shortcut.eightMinutes": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Install the profile within 8 minutes of downloading it. If Profile Downloaded is missing, return here and download it again."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Установите профиль в течение 8 минут после загрузки. Если пункта «Профиль загружен» нет, вернитесь сюда и загрузите профиль ещё раз."
+        }
+      }
+    }
+  },
+  "lc.shortcut.failure": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "The icon could not be prepared. Check that the app is still installed, then try again."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Не удалось подготовить значок. Проверьте, что приложение ещё установлено, и повторите попытку."
+        }
+      }
+    }
+  },
+  "lc.shortcut.iconStyle": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Icon appearance"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Оформление значка"
+        }
+      }
+    }
+  },
+  "lc.shortcut.light": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Light"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Светлое"
+        }
+      }
+    }
+  },
+  "lc.shortcut.dark": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Dark"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Тёмное"
+        }
+      }
+    }
+  },
+  "lc.shortcut.profileDescription %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Home Screen icon for %@. Opens the app through AnderStore."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Значок %@ на экране «Домой». Открывает приложение через AnderStore."
+        }
+      }
+    }
+  },
+  "lc.shortcut.profileConsent %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "This profile adds an icon for %@ to the Home Screen."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Этот профиль добавляет значок %@ на экран «Домой»."
+        }
+      }
+    }
+  },
+
     "lc.update.failedGeneric": {
       "extractionState": "manual",
       "localizations": {

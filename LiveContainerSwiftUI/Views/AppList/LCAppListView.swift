@@ -102,13 +102,10 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     
     @StateObject private var generatedIconStyleSelector = AlertHelper<GeneratedIconStyle>()
     
-    @State var safariViewOpened = false
-    @State var safariViewURL = URL(string: "https://google.com")!
     
     @State private var navigateTo : AnyView?
     @State private var isNavigationActive = false
     
-    @State private var helpPresent = false
     
     @State private var customSortViewPresent = false
     
@@ -201,11 +198,6 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                         Divider().padding(.vertical, 4)
                     }
 
-                    HStack {
-                        Text("lc.updates.liveApps".loc)
-                            .font(.system(.title2).bold())
-                        Spacer()
-                    }
                     appGrid(filteredApps)
                 }
                 .padding()
@@ -294,70 +286,9 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 shortcutOffer = app
             }
             
-            .navigationTitle("lc.appList.myApps".loc)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if sharedModel.multiLCStatus != 2 {
-                        if !installer.progressVisible {
-                            Menu {
-                                
-                                Button("lc.appList.installFromIpa".loc, systemImage: "doc.badge.plus", action: {
-                                    choosingIPA = true
-                                })
-                                Button("lc.appList.installFromUrl".loc, systemImage: "link.badge.plus", action: {
-                                    Task{ await startInstallFromUrl() }
-                                })
-                            } label: {
-                                Label("add", systemImage: "plus")
-                            }
-                            
-                        } else {
-                            ProgressView().progressViewStyle(.circular).padding(.horizontal, 8)
-                        }
-                    }
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    // AnderStore: Core is opened from the Account tab
-                    Button("Help", systemImage: "questionmark") {
-                        helpPresent = true
-                    }
-                    
+            .navigationTitle("lc.tabView.apps".loc)
+            .navigationBarTitleDisplayMode(.inline)
 
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("lc.appList.openLink".loc, systemImage: "link", action: {
-                        Task { await onOpenWebViewTapped() }
-                    })
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("Sort by", selection: $sharedAppSortManager.appSortType) {
-                            ForEach(AppSortType.allCases, id: \.self) { sortType in
-                                Label(sortType.displayName, systemImage: sortType.systemImage)
-                                    .tag(sortType)
-                            }
-                        }
-                        .onChange(of: sharedAppSortManager.appSortType) { newValue in
-                            if sharedAppSortManager.appSortType == .custom {
-                                customSortViewPresent = true
-                            }
-                        }
-                        if sharedAppSortManager.appSortType == .custom {
-                            Divider()
-                            
-                            Button {
-                                customSortViewPresent = true
-                            } label: {
-                                Label("lc.appList.sort.customManage".loc, systemImage: "slider.horizontal.3")
-                            }
-                        }
-                    } label: {
-                        Label("Sort by", systemImage: "line.3.horizontal.decrease.circle")
-                    }
-                }
-            }
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .alert("lc.common.error".loc, isPresented: $errorShow){
@@ -516,12 +447,6 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 await installFromPlist(urlStr: urlStr)
             })
         }
-        .fullScreenCover(isPresented: $safariViewOpened) {
-            SafariView(url: $safariViewURL)
-        }
-        .sheet(isPresented: $helpPresent) {
-            LCHelpView(isPresent: $helpPresent)
-        }
         .sheet(isPresented: $customSortViewPresent) {
             LCCustomSortView()
         }
@@ -561,8 +486,24 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 Task { await installer.install(.remoteURL(installUrl)) }
             }
         }
-        .searchable(text: $searchContext.query)
+        .onReceive(AnderAppTools.shared.$pending) { _ in consumeAppTool() }
+        .onAppear { consumeAppTool() }
+        .searchable(text: $searchContext.query, placement: .navigationBarDrawer(displayMode: .always))
 
+    }
+
+    @MainActor
+    private func consumeAppTool() {
+        guard sharedModel.selectedTab == .apps,
+              LCUtils.appGroupUserDefault.bool(forKey: "anderAdvancedFunctions"),
+              let tool = AnderAppTools.shared.pending else { return }
+        AnderAppTools.shared.pending = nil
+        switch tool {
+        case .ipa: choosingIPA = true
+        case .installURL: Task { await startInstallFromUrl() }
+        case .web: Task { await onOpenWebViewTapped() }
+        case .sort: openNavigationView(view: AnyView(AnderAppSortSettings()))
+        }
     }
 
     @MainActor
@@ -643,6 +584,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         for app in sharedModel.hiddenApps {
             app.delegate = self
         }
+        AnderHomeLaunchCoordinator.shared.registerAdvancedDelegate(self)
         didAppear = true
     }
     
@@ -779,21 +721,9 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     /// launch. Returning to an already open multitask window is handled inside runApp.
     @MainActor
     private func launch(_ app: LCAppModel, multitask: Bool? = nil) async {
-        if app.appInfo.isLocked && !sharedModel.isHiddenAppUnlocked {
-            do {
-                if !(try await LCUtils.authenticateUser()) { return }
-            } catch {
-                errorInfo = error.localizedDescription
-                errorShow = true
-                return
-            }
-        }
-        do {
-            try await app.runApp(multitask: multitask)
-        } catch {
-            errorInfo = error.localizedDescription
-            errorShow = true
-        }
+        guard let name = app.appInfo.relativeBundlePath,
+              let url = AnderHomeShortcutURL.make(bundleName: name, containerFolderName: app.uiSelectedContainer?.folderName) else { return }
+        AnderHomeLaunchCoordinator.shared.receive(url, multitask: multitask)
     }
 
     private func openDataFolder(for app: LCAppModel) {
@@ -1014,32 +944,18 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         return await runWhenMultitaskAlert.open()
     }
     
-    func installMdm(data: Data) {
-        safariViewURL = URL(string:"data:application/x-apple-aspen-config;base64,\(data.base64EncodedString())")!
-        safariViewOpened = true
+    func showHomeShortcut(app: LCAppModel) {
+        Task { await createHomeScreenShortcut(for: app) }
     }
 
     @MainActor
     private func createHomeScreenShortcut(for app: LCAppModel) async {
-        if app.appInfo.isLocked && !sharedModel.isHiddenAppUnlocked {
+        if (app.appInfo.isLocked || app.appInfo.isHidden) && !sharedModel.isHiddenAppUnlocked {
             guard (try? await LCUtils.authenticateUser()) == true else { return }
         }
-        guard let style = await promptForGeneratedIconStyle() else { return }
-        do {
-            guard let profile = app.appInfo.generateWebClipConfig(
-                withContainerId: app.uiSelectedContainer?.folderName,
-                iconStyle: style
-            ) else {
-                throw CocoaError(.propertyListWriteInvalid)
-            }
-            let data = try PropertyListSerialization.data(fromPropertyList: profile, format: .xml, options: 0)
-            installMdm(data: data)
-        } catch {
-            errorInfo = error.localizedDescription
-            errorShow = true
-        }
+        AnderHomeShortcutCoordinator.shared.show(app)
     }
-    
+
     func openNavigationView(view: AnyView) {
         navigateTo = view
         isNavigationActive = true
@@ -1087,33 +1003,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 }
             }
         } else if url.host == "livecontainer-launch" {
-            if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-                var bundleId : String? = nil
-                var containerName : String? = nil
-                var forceJIT: Bool? = nil
-                var urlStr: String? = nil
-                for queryItem in components.queryItems ?? [] {
-                    if queryItem.name == "bundle-name", let bundleId1 = queryItem.value {
-                        bundleId = bundleId1
-                    } else if queryItem.name == "container-folder-name", let containerName1 = queryItem.value {
-                        containerName = containerName1
-                    } else if queryItem.name == "jit", let forceJIT1 = queryItem.value {
-                        if forceJIT1 == "true" {
-                            forceJIT = true
-                        } else if forceJIT1 == "false" {
-                            forceJIT = false
-                        }
-                    } else if queryItem.name == "open-url" {
-                        if let decodedData = Data(base64Encoded: queryItem.value ?? ""),
-                           let decodedUrl = String(data: decodedData, encoding: .utf8) {
-                            urlStr = decodedUrl
-                        }
-                    }
-                }
-                if let bundleId, bundleId != "ui"{
-                    Task { await launchAppWithBundleId(bundleId: bundleId, container: containerName, urlStr: urlStr, forceJIT: forceJIT) }
-                }
-            }
+            AnderHomeLaunchCoordinator.shared.receive(url)
         } else if url.host == "install" {
             if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
                 var installUrl : String? = nil

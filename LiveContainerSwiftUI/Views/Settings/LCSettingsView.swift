@@ -53,6 +53,7 @@ struct LCSettingsView: View {
     @AppStorage("LCStrictHiding", store: LCUtils.appGroupUserDefault) var strictHiding = false
     @AppStorage("dynamicColors", store: LCUtils.appGroupUserDefault) var dynamicColors = true
     @AppStorage("darkModeIcon", store: LCUtils.appGroupUserDefault) var darkModeIcon = false
+    @AppStorage("anderAdvancedFunctions", store: LCUtils.appGroupUserDefault) var advancedFunctions = false
     
     @AppStorage("LCSideJITServerAddress", store: LCUtils.appGroupUserDefault) var sideJITServerAddress : String = ""
     @AppStorage("LCDeviceUDID", store: LCUtils.appGroupUserDefault) var deviceUDID: String = ""
@@ -231,6 +232,14 @@ struct LCSettingsView: View {
     /// Everything that used to crowd the settings list: same code, one tap deeper.
     private var advancedScreen: some View {
         Form {
+            Section {
+                Toggle("lc.tools.enabled".loc, isOn: $advancedFunctions)
+                if advancedFunctions, sharedModel.multiLCStatus != 2 {
+                    NavigationLink("lc.tools.title".loc) { AnderAppToolsView() }
+                }
+            } footer: {
+                Text("lc.tools.description".loc)
+            }
             if sharedModel.multiLCStatus != 2 {
                 Section {
                     if !certificateDataFound {

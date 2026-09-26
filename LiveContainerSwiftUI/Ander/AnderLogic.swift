@@ -334,6 +334,58 @@ enum AnderHomeShortcutURL {
     }
 }
 
+/// The legacy URL shape remains valid. Reject ambiguous or malformed launches.
+struct AnderHomeLaunchRequest: Equatable {
+    let bundleName: String
+    let container: String?
+    let openURL: String?
+    let forceJIT: Bool?
+
+    init?(url: URL) {
+        guard url.host?.lowercased() == "livecontainer-launch",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let items = components.queryItems ?? []
+        for key in ["bundle-name", "container-folder-name", "open-url", "jit"] {
+            guard items.filter({ $0.name == key }).count <= 1 else { return nil }
+        }
+        func value(_ key: String) -> String? { items.first { $0.name == key }?.value }
+        guard let name = value("bundle-name"), !name.isEmpty, name != "ui",
+              !name.contains("/"), !name.contains("\\"), name != ".", name != ".." else { return nil }
+        bundleName = name
+        if let folder = value("container-folder-name"), !folder.isEmpty {
+            guard !folder.contains("/"), !folder.contains("\\"), folder != ".", folder != ".." else { return nil }
+            container = folder
+        } else { container = nil }
+        if let encoded = value("open-url") {
+            guard let data = Data(base64Encoded: encoded), let decoded = String(data: data, encoding: .utf8),
+                  let target = URL(string: decoded), target.scheme != nil else { return nil }
+            openURL = decoded
+        } else { openURL = nil }
+        if let jit = value("jit") {
+            guard jit == "true" || jit == "false" else { return nil }
+            forceJIT = jit == "true"
+        } else { forceJIT = nil }
+    }
+}
+
+struct AnderHomeLaunchGate {
+    private(set) var active: AnderHomeLaunchRequest?
+    mutating func begin(_ request: AnderHomeLaunchRequest) -> Bool {
+        guard active == nil else { return false }
+        active = request
+        return true
+    }
+    mutating func finish() { active = nil }
+}
+
+enum AnderShortcutHTTP {
+    static func accepts(_ header: String, path: String) -> Bool {
+        guard let line = header.components(separatedBy: "\r\n").first else { return false }
+        let parts = line.split(separator: " ")
+        return parts.count == 3 && parts[0] == "GET" && parts[1] == path && parts[2] == "HTTP/1.1"
+    }
+}
+
 struct AnderLatestUpdate: Equatable {
     let version: String
     let notes: String?

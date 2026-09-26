@@ -23,6 +23,8 @@ struct LCTabView: View {
     @AppStorage("anderWelcomeShown") private var welcomeShown = false
     @AppStorage("anderLatestVersion") private var anderLatestVersion = ""
     @ObservedObject private var selfUpdater = AnderSelfUpdateCoordinator.shared
+    @ObservedObject private var homeLauncher = AnderHomeLaunchCoordinator.shared
+    @ObservedObject private var homeShortcut = AnderHomeShortcutCoordinator.shared
 
     let pub = NotificationCenter.default.publisher(for: UIScene.didDisconnectNotification)
     
@@ -55,6 +57,31 @@ struct LCTabView: View {
                 .tag(LCTabIdentifier.settings)
         }
         .tint(AnderTheme.accent)
+        .overlay(alignment: .top) {
+            if let app = homeLauncher.app {
+                AnderHomeLaunchStatus(coordinator: homeLauncher, app: app)
+                    .clipShape(RoundedRectangle(cornerRadius: 18)).padding()
+            }
+        }
+        .sheet(isPresented: Binding(get: { homeShortcut.app != nil }, set: { if !$0 { homeShortcut.app = nil } })) {
+            if let app = homeShortcut.app { AnderHomeShortcutGuide(app: app) }
+        }
+        .alert("lc.home.containerTitle".loc, isPresented: $homeLauncher.needsContainerChoice) {
+            Button("lc.home.openDefault".loc) { homeLauncher.answer(true) }
+            Button("lc.common.cancel".loc, role: .cancel) { homeLauncher.answer(false) }
+        } message: { Text("lc.home.missingContainer".loc) }
+        .alert("lc.home.switchTitle".loc, isPresented: $homeLauncher.needsMultitaskChoice) {
+            Button("lc.common.ok".loc) { homeLauncher.answer(true) }
+            Button("lc.common.cancel".loc, role: .cancel) { homeLauncher.answer(false) }
+        } message: { Text("lc.home.switchMessage".loc) }
+        .alert("lc.common.error".loc, isPresented: Binding(get: { homeLauncher.message != nil }, set: { if !$0 { homeLauncher.message = nil } })) {
+            if homeLauncher.recovery == "store" {
+                Button("lc.home.goStore".loc) { sharedModel.selectedTab = .sources }
+            } else if homeLauncher.recovery == "device" {
+                Button("lc.home.goDevice".loc) { sharedModel.selectedTab = .account }
+            }
+            Button("lc.common.ok".loc, role: .cancel) { homeLauncher.message = nil }
+        } message: { Text(homeLauncher.message ?? "") }
         .safeAreaInset(edge: .top) {
             if selfUpdater.showSuccess {
                 HStack(alignment: .top, spacing: 12) {
@@ -127,6 +154,10 @@ struct LCTabView: View {
             checkAndSaveBundleId()
             checkGetTaskAllow()
             checkPrivateContainerBookmark()
+            if let saved = UserDefaults.standard.string(forKey: "anderPendingHomeLaunchURL") {
+                UserDefaults.standard.removeObject(forKey: "anderPendingHomeLaunchURL")
+                if let url = URL(string: saved) { homeLauncher.receive(url) }
+            }
         }
         .onReceive(pub) { out in
             if let scene1 = sceneDelegate.window?.windowScene, let scene2 = out.object as? UIWindowScene, scene1 == scene2 {
@@ -141,6 +172,11 @@ struct LCTabView: View {
     }
     
     func dispatchURL(url: URL) {
+        if url.host?.lowercased() == "livecontainer-launch",
+           URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "bundle-name" })?.value != "ui" {
+            homeLauncher.receive(url)
+            return
+        }
         repeat {
             if url.isFileURL {
                 sharedModel.selectedTab = .apps

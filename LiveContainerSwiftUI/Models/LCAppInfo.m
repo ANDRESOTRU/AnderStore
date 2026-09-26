@@ -251,10 +251,10 @@
 
 - (NSDictionary *)generateWebClipConfigWithContainerId:(NSString*)containerId iconStyle:(GeneratedIconStyle)style{
     NSURLComponents *components = [NSURLComponents new];
-    components.scheme = @"livecontainer";
+    components.scheme = NSUserDefaults.lcAppUrlScheme ?: @"livecontainer";
     components.host = @"livecontainer-launch";
     NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray arrayWithObject:
-        [NSURLQueryItem queryItemWithName:@"bundle-name" value:self.bundlePath.lastPathComponent]];
+        [NSURLQueryItem queryItemWithName:@"bundle-name" value:self.relativeBundlePath ?: self.bundlePath.lastPathComponent]];
     if(containerId.length > 0) {
         [queryItems addObject:[NSURLQueryItem queryItemWithName:@"container-folder-name" value:containerId]];
     }
@@ -269,14 +269,17 @@
         self.bundleIdentifier, shortcutScope];
     
     UIImage* icon = [self generateLiveContainerWrappedIconWithStyle:style];
-    
+    NSData* iconData = icon ? UIImagePNGRepresentation(icon) : nil;
+    if (!iconData || !self.displayName) return nil;
+    NSString* description = [@"lc.shortcut.profileDescription %@" localizeWithFormat:self.displayName];
+
     NSDictionary *payload = @{
         @"FullScreen": @YES,
-        @"Icon": UIImagePNGRepresentation(icon),
+        @"Icon": iconData,
         @"IgnoreManifestScope": @YES,
         @"IsRemovable": @YES,
         @"Label": self.displayName,
-        @"PayloadDescription": [NSString stringWithFormat:@"Web Clip for launching %@ (%@) in AnderStore", self.displayName, self.bundlePath.lastPathComponent],
+        @"PayloadDescription": description,
         @"PayloadDisplayName": self.displayName,
         @"PayloadIdentifier": profileIdentifier,
         @"PayloadType": @"com.apple.webClip.managed",
@@ -288,7 +291,7 @@
     };
     return @{
         @"ConsentText": @{
-            @"default": [NSString stringWithFormat:@"This profile installs a web clip which opens %@ (%@) in AnderStore", self.displayName, self.bundlePath.lastPathComponent]
+            @"default": [@"lc.shortcut.profileConsent %@" localizeWithFormat:self.displayName]
         },
         @"PayloadContent": @[payload],
         @"PayloadDescription": payload[@"PayloadDescription"],

@@ -309,22 +309,7 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
     }
 
     private func createAppClip() async {
-        guard let style = await delegate.promptForGeneratedIconStyle() else {
-            return
-        }
-
-        do {
-            guard let profile = configuration.model.appInfo.generateWebClipConfig(
-                withContainerId: configuration.model.uiSelectedContainer?.folderName,
-                iconStyle: style
-            ) else {
-                throw CocoaError(.propertyListWriteInvalid)
-            }
-            let data = try PropertyListSerialization.data(fromPropertyList: profile, format: .xml, options: 0)
-            delegate.installMdm(data: data)
-        } catch {
-            showError(error.localizedDescription)
-        }
+        delegate.showHomeShortcut(app: configuration.model)
     }
 
     private func saveIcon() async {

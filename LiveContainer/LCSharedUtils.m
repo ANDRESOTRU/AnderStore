@@ -184,6 +184,15 @@ NSString* FBSOpenApplicationOptionKeyPayloadURL = @"__PayloadURL";
     return YES;
 }
 
++ (void)routeHomeLaunchToUI:(NSURL *)url {
+    [lcUserDefaults setObject:url.absoluteString forKey:@"anderPendingHomeLaunchURL"];
+    [lcUserDefaults removeObjectForKey:@"selected"];
+    [lcUserDefaults removeObjectForKey:@"selectedContainer"];
+    [lcUserDefaults removeObjectForKey:@"launchAppUrlScheme"];
+    [lcUserDefaults setBool:NO forKey:@"LCOpenSideStore"];
+    [self launchToGuestAppWithClassicMode:0];
+}
+
 + (BOOL)launchToGuestAppWithURL:(NSURL *)url {
     NSURLComponents* components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
     if(![components.host isEqualToString:@"livecontainer-launch"]) return NO;
