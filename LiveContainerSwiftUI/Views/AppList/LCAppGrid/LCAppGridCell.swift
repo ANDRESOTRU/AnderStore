@@ -136,7 +136,7 @@ struct LCAppGridCell: View {
         }
         .buttonStyle(.plain)
         .disabled(model.isAppRunning)
-        .contextMenu { contextMenu }
+        .contextMenu { menuItems }
         .onAppear(perform: loadIcon)
         .onChange(of: darkModeIcon) { _ in loadIcon() }
     }
@@ -213,7 +213,7 @@ struct LCAppGridCell: View {
     // MARK: - Long press
 
     @ViewBuilder
-    private var contextMenu: some View {
+    private var menuItems: some View {
         // Listed flat rather than in a submenu: a nested Menu inside a context menu is
         // unreliable on iOS 15, which this app still supports.
         if model.uiContainers.count > 1 {
