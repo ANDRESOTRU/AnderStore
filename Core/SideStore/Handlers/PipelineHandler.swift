@@ -26,14 +26,20 @@ final class PipelineHandler: PipelineExecutionHandler,
     var userCustomizationHandler: UserCustomizationHandler { self }
     
     let isResignActive: Bool
+    let updateStageHandler: (@Sendable (String) -> Void)?
+    let prepareSelfInstallation: (@Sendable () async throws -> Void)?
     private let presenterProvider: PresenterProvider?
     
     init(
         isResignActive: Bool = false,
-        presenterProvider: PresenterProvider? = nil
+        presenterProvider: PresenterProvider? = nil,
+        updateStageHandler: (@Sendable (String) -> Void)? = nil,
+        prepareSelfInstallation: (@Sendable () async throws -> Void)? = nil
     ) {
         self.isResignActive = isResignActive
         self.presenterProvider = presenterProvider
+        self.updateStageHandler = updateStageHandler
+        self.prepareSelfInstallation = prepareSelfInstallation
     }
 
     @MainActor

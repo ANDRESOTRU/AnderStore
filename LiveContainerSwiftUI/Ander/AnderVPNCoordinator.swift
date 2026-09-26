@@ -133,6 +133,7 @@ final class AnderVPNCoordinator: ObservableObject {
         }
 
         if UserDefaults.standard.bool(forKey: Self.cleanupKey), leasePolicy.activeLeases == 0 {
+            if AnderSelfUpdateCoordinator.shared.protectsVPN { return true }
             recoverOwnedSessionIfNeeded()
             return true
         }
@@ -161,6 +162,7 @@ final class AnderVPNCoordinator: ObservableObject {
 
     func recoverOwnedSessionIfNeeded() {
         guard recoveryTask == nil,
+              !AnderSelfUpdateCoordinator.shared.protectsVPN,
               UserDefaults.standard.bool(forKey: Self.cleanupKey),
               leasePolicy.activeLeases == 0 else { return }
 

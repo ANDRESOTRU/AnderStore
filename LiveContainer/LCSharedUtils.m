@@ -123,6 +123,21 @@ NSString* FBSOpenApplicationOptionKeyPayloadURL = @"__PayloadURL";
     return [nud objectForKey:@"LCCertificatePassword"];
 }
 
++ (void)openUpdatedAnderStoreWithBundleIdentifier:(NSString *)bundleIdentifier completion:(void (^)(BOOL))completion {
+    // Called by the surviving Core after installation. Never kill Core or the
+    // host on failure, and never request two launches as the guest launcher does.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        LSApplicationWorkspace *workspace = [PrivClass(LSApplicationWorkspace) defaultWorkspace];
+        _LSOpenConfiguration *configuration = [[PrivClass(_LSOpenConfiguration) alloc] init];
+        if (!workspace || !configuration || bundleIdentifier.length == 0) { completion(NO); return; }
+        [workspace openApplicationWithBundleIdentifier:bundleIdentifier
+                                         configuration:configuration
+                                     completionHandler:^(BOOL success, NSError *error) {
+            completion(success && error == nil);
+        }];
+    });
+}
+
 + (BOOL)launchToGuestAppWithClassicMode:(NSUInteger)classicMode {
     void (^completionHandler)(BOOL) = ^(BOOL success) {
         // syscall(SYS_ptrace, PT_DENY_ATTACH, 0, 0, 0);

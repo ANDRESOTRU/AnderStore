@@ -9,6 +9,15 @@
 #include "../LiveContainer/utils.h"
 #include "../LiveContainer/LCSharedUtils.h"
 @import UIKit;
+@import UserNotifications;
+
+// In LiveProcess these selectors contain the original implementations after
+// SideStoreHooks swizzles them. Use the real center, not its synthetic permission
+// settings or forwarding through a host that iOS may already have terminated.
+@interface UNUserNotificationCenter (AnderUpdateDelivery)
+- (void)lc_addNotificationRequest:(UNNotificationRequest *)request
+            withCompletionHandler:(void (^)(NSError *))completion;
+@end
 
 @interface SideStoreClient(Swift)
 - (void)performRefreshForRealWithIdentifier:(NSString*)identifier
@@ -102,6 +111,37 @@ static void AnderTerminateCore(void) {
         [server request:requestID didEmitEvent:event];
     } completion:^(NSDictionary *response, NSDictionary *error) {
         [server request:requestID didFinishWithResponse:response error:error];
+        if ([request[@"cmd"] isEqual:@"self.update"] && !error && [response[@"reopen"] boolValue]) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                __block BOOL finished = NO;
+                void (^finishLaunch)(BOOL) = ^(BOOL opened) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (finished) return;
+                        finished = YES;
+                        [bridge performRequest:@{@"cmd": @"update.launchResult", @"opened": @(opened),
+                                                 @"operationID": response[@"operationID"] ?: @""}
+                                     requestID:NSUUID.UUID.UUIDString onEvent:^(NSDictionary *event) {}
+                                    completion:^(NSDictionary *result, NSDictionary *failure) {
+                            if ([result[@"notify"] boolValue] && [response[@"notificationsAllowed"] boolValue]) {
+                                UNMutableNotificationContent *content = [UNMutableNotificationContent new];
+                                content.title = response[@"notificationTitle"] ?: @"AnderStore";
+                                content.body = response[@"notificationBody"] ?: @"";
+                                content.sound = UNNotificationSound.defaultSound;
+                                UNNotificationRequest *notice = [UNNotificationRequest requestWithIdentifier:@"anderstore.update.open"
+                                                                                                     content:content trigger:nil];
+                                [UNUserNotificationCenter.currentNotificationCenter lc_addNotificationRequest:notice
+                                                                                       withCompletionHandler:nil];
+                            }
+                        }];
+                    });
+                };
+                [LCSharedUtils openUpdatedAnderStoreWithBundleIdentifier:request[@"hostBundleIdentifier"] completion:finishLaunch];
+                // Some iOS versions never invoke the private opener's completion.
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    finishLaunch(NO);
+                });
+            });
+        }
     }];
 }
 

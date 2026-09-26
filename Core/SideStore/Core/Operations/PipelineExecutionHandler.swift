@@ -10,12 +10,19 @@ import Foundation
 import SideSign
 
 protocol PipelineExecutionHandler: AnyObject, Sendable {
+    var updateStageHandler: (@Sendable (String) -> Void)? { get }
+    var prepareSelfInstallation: (@Sendable () async throws -> Void)? { get }
     var preflightChecksHandler: PreflightChecksHandler { get }
     var entitlementsReviewHandler: EntitlementsReviewHandler { get }
     var extensionRemovalHandler: ExtensionRemovalHandler { get }
     var unsupportedVersionHandler: UnsupportedVersionHandler { get }
     var installAppHandler: InstallAppHandler { get }
     var userCustomizationHandler: UserCustomizationHandler { get }
+}
+
+extension PipelineExecutionHandler {
+    var updateStageHandler: (@Sendable (String) -> Void)? { nil }
+    var prepareSelfInstallation: (@Sendable () async throws -> Void)? { nil }
 }
 
 

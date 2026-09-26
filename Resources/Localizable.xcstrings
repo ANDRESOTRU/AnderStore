@@ -1,6 +1,295 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "lc.update.failedGeneric": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update could not be completed. Check your internet and VPN connection, then try again. If this keeps happening, update AnderStore using the computer installer."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось завершить обновление. Проверьте подключение к интернету и VPN, затем повторите попытку. Если ошибка повторяется, обновите AnderStore через установщик на компьютере."
+          }
+        }
+      }
+    },
+    "lc.update.stageCheckStatus": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking update status"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверяем состояние обновления"
+          }
+        }
+      }
+    },
+    "lc.update.stageConnection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking the connection"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверяем подключение"
+          }
+        }
+      }
+    },
+    "lc.update.stageDownload": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading the new version"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачиваем новую версию"
+          }
+        }
+      }
+    },
+    "lc.update.stagePrepare": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing the update"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подготавливаем обновление"
+          }
+        }
+      }
+    },
+    "lc.update.stageInstall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing the update"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Устанавливаем обновление"
+          }
+        }
+      }
+    },
+    "lc.update.stageReopen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening the new version"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открываем новую версию"
+          }
+        }
+      }
+    },
+    "lc.update.beforeInstall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnderStore will briefly close during installation. It will try to open the new version automatically. If it stays closed, open AnderStore from the Home Screen."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Во время установки AnderStore ненадолго закроется и попробует автоматически открыть новую версию. Если приложение не откроется, нажмите значок AnderStore на домашнем экране."
+          }
+        }
+      }
+    },
+    "lc.update.delayed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This step is taking longer. We are checking the update status."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот этап занимает больше времени. Мы проверяем состояние обновления."
+          }
+        }
+      }
+    },
+    "lc.update.checkStatus": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check update status"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить состояние обновления"
+          }
+        }
+      }
+    },
+    "lc.update.totalProgress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overall progress: %d%%"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общий прогресс: %d%%"
+          }
+        }
+      }
+    },
+    "lc.update.verified": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnderStore updated to version %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnderStore обновлён до версии %@"
+          }
+        }
+      }
+    },
+    "lc.update.openManually": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update was installed. Open AnderStore from the Home Screen to start the new version."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление установлено. Нажмите значок AnderStore на домашнем экране, чтобы открыть новую версию."
+          }
+        }
+      }
+    },
+    "lc.update.uncertain": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We cannot yet confirm that installation has finished. Do not start another update. Open AnderStore from the Home Screen and check its version. If the old version still opens, check update status here."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока не удалось подтвердить завершение установки. Не запускайте обновление повторно. Откройте AnderStore с домашнего экрана и проверьте версию. Если открылась старая версия, проверьте состояние обновления здесь."
+          }
+        }
+      }
+    },
+    "lc.update.storageFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save the update status. Free some space on your iPhone and try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить состояние обновления. Освободите место на iPhone и повторите попытку."
+          }
+        }
+      }
+    },
+    "lc.update.backgroundRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installation could not start because AnderStore did not move to the background. Try again; when installation starts, go to the Home Screen without force-closing the app."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установка не началась: AnderStore не удалось перейти в фон. Повторите попытку; когда начнётся установка, перейдите на домашний экран, не закрывая приложение принудительно."
+          }
+        }
+      }
+    },
+    "lc.update.networkFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not download the update. Check your internet connection and try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось скачать обновление. Проверьте подключение к интернету и повторите попытку."
+          }
+        }
+      }
+    },
     "lc.account.errorCoreStopped" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -32254,13 +32543,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Checking the AnderStore catalog…"
+            "value" : "Checking the update"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Проверяем каталог AnderStore…"
+            "value" : "Проверяем обновление"
           }
         }
       }

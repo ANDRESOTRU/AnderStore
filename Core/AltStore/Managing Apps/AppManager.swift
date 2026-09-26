@@ -681,6 +681,9 @@ final class AppManager: ObservableObject, @unchecked Sendable
     func update(_ installedApp: InstalledApp,
                 to version: AppVersion? = nil,
                 presentingViewController: UIViewController?,
+                stageHandler: (@Sendable (String) -> Void)? = nil,
+                prepareSelfInstallation: (@Sendable () async throws -> Void)? = nil,
+                operationCreated: ((RefreshGroup) -> Void)? = nil,
                 completionHandler: @escaping (Result<InstalledApp, Error>) -> Void) -> Progress
     {
         debugLog("[AppManager] update() called for app: \(installedApp.bundleIdentifier)")
@@ -692,7 +695,14 @@ final class AppManager: ObservableObject, @unchecked Sendable
             completionHandler(.failure(OperationError.invalidParameters("Make sure we never accidentally 'update' to already installed app.")))
             return Progress.discreteProgress(totalUnitCount: 1)
         }
-        let pipelineHandler = self.makePipelineHandler(presentingViewController: presentingViewController)
+        let pipelineHandler = PipelineHandler(
+            isResignActive: presentingViewController is ResignAltStoreViewController,
+            presenterProvider: { [weak presentingViewController] in
+                presentingViewController?.presentedViewController ?? presentingViewController
+            },
+            updateStageHandler: stageHandler,
+            prepareSelfInstallation: prepareSelfInstallation
+        )
         let context = self.makeAuthenticatedContext(presentingViewController: presentingViewController)
         let group = self.pipelineRunner.performSingleOperation(
             .update(appVersion, customBundleIdentifier: installedApp.customBundleIdentifier), 
@@ -700,6 +710,7 @@ final class AppManager: ObservableObject, @unchecked Sendable
             context: context, 
             completionHandler: completionHandler
         )
+        operationCreated?(group)
         return group.progress
     }
     

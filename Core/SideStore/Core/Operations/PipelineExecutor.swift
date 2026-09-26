@@ -31,6 +31,15 @@ final class PipelineExecutor: @unchecked Sendable {
         var finalApp: InstalledApp?
         
         for pipelineStep in pipelineSteps {
+            if context.handler.updateStageHandler != nil { try Task.checkCancellation() }
+            // Report actual operations, never infer a stage from a progress percentage.
+            let stage: String
+            switch pipelineStep.step {
+            case .downloadApp: stage = "download"
+            case .installApp: stage = "install"
+            default: stage = "prepare"
+            }
+            context.handler.updateStageHandler?(stage)
             if let result = try await executeStep(
                 pipelineStep.step,
                 context: context,

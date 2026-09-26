@@ -22,6 +22,7 @@ struct LCTabView: View {
     @StateObject var downloadHelper = DownloadHelper()
     @AppStorage("anderWelcomeShown") private var welcomeShown = false
     @AppStorage("anderLatestVersion") private var anderLatestVersion = ""
+    @ObservedObject private var selfUpdater = AnderSelfUpdateCoordinator.shared
 
     let pub = NotificationCenter.default.publisher(for: UIScene.didDisconnectNotification)
     
@@ -54,12 +55,25 @@ struct LCTabView: View {
                 .tag(LCTabIdentifier.settings)
         }
         .tint(AnderTheme.accent)
+        .safeAreaInset(edge: .top) {
+            if selfUpdater.showSuccess {
+                HStack(alignment: .top, spacing: 12) {
+                    Text(String(format: "lc.update.verified".loc, selfUpdater.state.version))
+                        .font(.body.weight(.medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("lc.common.ok".loc) { selfUpdater.acknowledgeSuccess() }
+                }
+                .padding()
+                .background(AnderTheme.background)
+            }
+        }
         .fullScreenCover(isPresented: Binding(get: { !welcomeShown }, set: { if !$0 { welcomeShown = true } })) {
             AnderWelcomeView { welcomeShown = true }
         }
         .onAppear {
             AnderTheme.applyAppearance()
             AnderUpdateChecker.checkIfNeeded()
+            selfUpdater.checkStatus()
         }
         .downloadAlert(helper: downloadHelper)
         .environmentObject(downloadHelper)
@@ -594,111 +608,6 @@ enum AnderAccountAPI {
     }
 
     @discardableResult
-    static func updateSelf(version: String,
-                           stage: @escaping (String) -> Void = { _ in },
-                           progress: @escaping (Double) -> Void,
-                           completion: @escaping (Bool?, AnderCoreFailure?) -> Void) -> Bool {
-        perform("self.update",
-                params: ["version": version],
-                onEvent: { event in
-                    switch event["kind"] as? String {
-                    case "progress":
-                        if let value = event["value"] as? Double { progress(value) }
-                    case "stage":
-                        if let value = event["value"] as? String { stage(value) }
-                    default:
-                        break
-                    }
-                },
-                completion: { response, failure in
-                    completion(response?["updated"] as? Bool, failure)
-                })
-    }
-
-    /// One answer per update: from Core, or from the watchdog — whichever comes first.
-    private final class UpdateWatch: @unchecked Sendable {
-        private let lock = NSLock()
-        private let startedAt = Date().timeIntervalSince1970
-        private var lastEventAt = Date().timeIntervalSince1970
-        private var finished = false
-
-        // lock()/unlock() rather than NSLock.withLock: the app still supports iOS 15.
-        func touch() {
-            lock.lock(); defer { lock.unlock() }
-            lastEventAt = Date().timeIntervalSince1970
-        }
-        var isFinished: Bool {
-            lock.lock(); defer { lock.unlock() }
-            return finished
-        }
-        func finishOnce() -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            guard !finished else { return false }
-            finished = true
-            return true
-        }
-        func hasExpired() -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            return AnderUpdateWatchdogPolicy.hasExpired(startedAt: startedAt,
-                                                        lastEventAt: lastEventAt,
-                                                        now: Date().timeIntervalSince1970)
-        }
-    }
-
-    /// Before 1.6.29 an update Core could not finish showed a bar stuck near 0 % forever:
-    /// nothing timed out. Now silence for three minutes (or 15 minutes in total) ends it.
-    static func updateSelfAsync(version: String,
-                                stage: @escaping (String) -> Void = { _ in },
-                                progress: @escaping (Double) -> Void) async throws -> Bool {
-        let watch = UpdateWatch()
-        return try await withCheckedThrowingContinuation { continuation in
-            let finish: (Result<Bool, Error>) -> Void = { result in
-                guard watch.finishOnce() else { return }
-                continuation.resume(with: result)
-            }
-            let started = updateSelf(version: version,
-                                     stage: { value in watch.touch(); stage(value) },
-                                     progress: { value in watch.touch(); progress(value) }) { updated, failure in
-                if let failure {
-                    finish(.failure(failure))
-                } else {
-                    finish(.success(updated ?? false))
-                }
-            }
-            guard started else {
-                finish(.failure(AnderVPNCoordinatorError.coreUnavailable))
-                return
-            }
-            Task {
-                while !watch.isFinished {
-                    try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    if watch.hasExpired() {
-                        finish(.failure(AnderCoreFailure(kind: "updateTimedOut",
-                                                         message: "AnderStore Core stopped reporting progress")))
-                    }
-                }
-            }
-        }
-    }
-
-    /// Asks Core whether it could re-sign AnderStore right now.
-    static func updateBlocker() async -> AnderUpdateBlocker? {
-        await withCheckedContinuation { continuation in
-            let started = perform("update.readiness") { response, _ in
-                guard let response else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: AnderUpdateBlocker.from(
-                    signedIn: response["signedIn"] as? Bool ?? false,
-                    hasCertificate: response["hasCertificate"] as? Bool ?? false
-                ))
-            }
-            if !started { continuation.resume(returning: nil) }
-        }
-    }
-
-    @discardableResult
     static func refresh(progress: @escaping (Double) -> Void,
                         completion: @escaping (AnderCoreFailure?) -> Void) -> Bool {
         perform("apps.refresh",
@@ -814,7 +723,6 @@ struct AnderAccountView: View {
         case signingIn
         case needsCode(String)
         case refreshing(Double)
-        case updating(Double)
     }
 
     @AppStorage("anderLatestVersion") private var latestVersion = ""
@@ -828,6 +736,7 @@ struct AnderAccountView: View {
 
     @ObservedObject private var state = AnderState.shared
     @ObservedObject private var vpnCoordinator = AnderVPNCoordinator.shared
+    @ObservedObject private var selfUpdater = AnderSelfUpdateCoordinator.shared
     @State private var coreAvailable = true
     @State private var phase: Phase = .idle
     @State private var email = ""
@@ -842,14 +751,13 @@ struct AnderAccountView: View {
     @State private var cooldownTick = 0
     @State private var showSignInForm = false
     @State private var showSetupInstructions = false
-    /// What the running self-update is doing: vpn, catalog, install.
-    @State private var updateStage: String? = nil
 
     private var signedIn: Bool { state.account.signedIn }
     /// The step-by-step list is for the very first setup only; afterwards the status card
     /// says everything, and a list of ticks next to red errors only confused people.
     private var firstSetup: Bool { state.readiness == .needsAccount || state.readiness == .needsCertificate }
     private var busy: Bool {
+        if selfUpdater.state.blocksNewUpdate { return true }
         if case .idle = phase { return false }
         return true
     }
@@ -867,7 +775,7 @@ struct AnderAccountView: View {
                     if vpnCoordinator.needsAttention || vpnCoordinator.state == .enabling || vpnCoordinator.state == .disabling {
                         vpnCard
                     }
-                    if updateAvailable || isUpdating {
+                    if updateAvailable || selfUpdater.state.status != .idle {
                         updateCard
                     }
                     signatureCard
@@ -947,8 +855,7 @@ struct AnderAccountView: View {
     }
 
     private var isUpdating: Bool {
-        if case .updating = phase { return true }
-        return false
+        selfUpdater.state.blocksNewUpdate
     }
 
     private enum StatusAction {
@@ -1025,58 +932,7 @@ struct AnderAccountView: View {
             return
         }
         message = nil
-        phase = .updating(0)
-        updateStage = nil
-        Task { @MainActor in
-            // Core must be able to re-sign AnderStore; otherwise say why before touching VPN.
-            if let blocker = await AnderAccountAPI.updateBlocker() {
-                phase = .idle
-                state.refreshUpdateReadiness()
-                message = AnderAccountAPI.friendly(AnderCoreFailure(kind: blocker.rawValue, message: ""))
-                return
-            }
-            updateStage = "vpn"
-            do {
-                let updated = try await vpnCoordinator.withVPN(reason: .selfUpdate) {
-                    try await AnderAccountAPI.updateSelfAsync(version: latestVersion,
-                                                              stage: { value in updateStage = value },
-                                                              progress: { value in phase = .updating(value) })
-                }
-                phase = .idle
-                updateStage = nil
-                if !updated {
-                    // Core already lists this version as installed.
-                    message = String(format: "lc.update.alreadyInstalled".loc, latestVersion)
-                } else {
-                    state.markDeviceConnectionReady()
-                    message = "lc.update.installed".loc
-                    latestNotes = ""
-                }
-            } catch let failure as AnderCoreFailure {
-                phase = .idle
-                updateStage = nil
-                if AnderErrorText.requiresSignIn(failure.kind) {
-                    state.markSignInNeeded()
-                }
-                message = AnderAccountAPI.friendly(failure)
-            } catch {
-                phase = .idle
-                updateStage = nil
-                message = AnderAccountAPI.friendlyError(error)
-            }
-        }
-    }
-
-    /// Text under the progress bar: what is happening now, not a silent 0 %.
-    private var updateStageText: String {
-        switch updateStage {
-        case "vpn":
-            return "lc.update.stageVPN".loc
-        case "catalog":
-            return "lc.update.stageCatalog".loc
-        default:
-            return "lc.update.inProgress".loc
-        }
+        selfUpdater.start(version: latestVersion)
     }
 
     private func retryVPNOperation() {
@@ -1183,23 +1039,51 @@ struct AnderAccountView: View {
                     .foregroundColor(AnderTheme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("lc.update.title".loc).font(.footnote).foregroundStyle(.secondary)
-                    Text(String(format: "lc.update.available".loc, latestVersion))
+                    Text(selfUpdater.state.status == .verified && !updateAvailable
+                         ? String(format: "lc.update.verified".loc, selfUpdater.state.version)
+                         : String(format: "lc.update.available".loc,
+                                  isUpdating ? selfUpdater.state.version : latestVersion))
                         .font(.title3.weight(.semibold))
                 }
                 Spacer()
             }
             if !latestNotes.isEmpty {
-                Text(latestNotes).font(.footnote).foregroundStyle(.secondary).lineLimit(4)
+                Text(latestNotes).font(.footnote).foregroundStyle(.secondary)
             }
             Text(String(format: "lc.update.current".loc, AnderUpdateChecker.currentVersion))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if case .updating(let value) = phase {
-                ProgressView(value: value).tint(AnderTheme.accent)
-                Text(updateStageText).font(.footnote).foregroundStyle(.secondary)
-            } else {
+            if isUpdating {
+                Text(selfUpdater.state.status == .uncertain
+                     ? "lc.update.stageCheckStatus".loc : selfUpdater.state.stageKey.loc)
+                    .font(.body.weight(.medium))
+                    .accessibilityAddTraits(.updatesFrequently)
+                if let value = selfUpdater.state.progress,
+                   selfUpdater.state.status == .running,
+                   ["download", "prepare", "install"].contains(selfUpdater.state.stage) {
+                    ProgressView(value: value).tint(AnderTheme.accent)
+                    Text(String(format: "lc.update.totalProgress".loc, Int(value * 100)))
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ProgressView().tint(AnderTheme.accent)
+                }
+                Text("lc.update.beforeInstall".loc).font(.footnote).foregroundStyle(.secondary)
+                if selfUpdater.delayed {
+                    Text("lc.update.delayed".loc).font(.footnote).foregroundStyle(.secondary)
+                }
+                if selfUpdater.state.status == .installed || selfUpdater.state.status == .uncertain {
+                    if selfUpdater.state.status == .installed {
+                        Text("lc.update.openManually".loc).font(.footnote)
+                    } else {
+                        Text("lc.update.uncertain".loc).font(.footnote)
+                    }
+                    Button("lc.update.checkStatus".loc) { selfUpdater.checkStatus() }
+                }
+            } else if updateAvailable {
+                Text("lc.update.beforeInstall".loc).font(.footnote).foregroundStyle(.secondary)
                 Button(action: updateSelf) {
-                    Label("lc.update.button".loc, systemImage: "arrow.down.circle.fill")
+                    Label(selfUpdater.state.status == .failed ? "lc.common.retry".loc : "lc.update.button".loc,
+                          systemImage: "arrow.down.circle.fill")
                         .font(.body.weight(.medium))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
@@ -1224,6 +1108,9 @@ struct AnderAccountView: View {
                             .foregroundColor(AnderTheme.accent)
                     }
                 }
+            }
+            if let error = selfUpdater.errorText {
+                Text(error).font(.footnote).foregroundColor(.red)
             }
         }
         .anderCard()

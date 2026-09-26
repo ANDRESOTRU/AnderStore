@@ -3,6 +3,76 @@ import XCTest
 @testable import AnderLogic
 
 final class AnderLogicTests: XCTestCase {
+    func testSelfUpdateUsesRealStagesAndClearsPreviousStageProgress() {
+        var state = AnderSelfUpdateState(status: .running, lastAdvanceAt: 10)
+        state.receive(["operationID": "a", "kind": "stage", "value": "download"], now: 20)
+        XCTAssertEqual(state.stageKey, "lc.update.stageDownload")
+        state.receive(["operationID": "a", "kind": "progress", "value": 0.4], now: 21)
+        XCTAssertEqual(state.progress, 0.4)
+        state.receive(["operationID": "a", "kind": "stage", "value": "prepare"], now: 22)
+        XCTAssertEqual(state.stageKey, "lc.update.stagePrepare")
+        XCTAssertNil(state.progress)
+    }
+
+    func testSelfUpdateRepeatedEventsDoNotHideDelay() {
+        var state = AnderSelfUpdateState(operationID: "a", status: .running, stage: "download", lastAdvanceAt: 0)
+        state.receive(["operationID": "a", "kind": "progress", "value": 0.2], now: 10)
+        state.receive(["operationID": "a", "kind": "progress", "value": 0.2], now: 39)
+        state.receive(["operationID": "a", "kind": "stage", "value": "download"], now: 39)
+        XCTAssertFalse(state.isDelayed(now: 39))
+        XCTAssertTrue(state.isDelayed(now: 40))
+        state.receive(["operationID": "a", "kind": "progress", "value": 0.3], now: 41)
+        XCTAssertFalse(state.isDelayed(now: 41))
+    }
+
+    func testSelfUpdateRejectsLateAndInvalidProgress() {
+        var state = AnderSelfUpdateState(operationID: "new", status: .running, stage: "download", progress: 0.5, lastAdvanceAt: 10)
+        let before = state
+        state.receive(["operationID": "old", "kind": "stage", "value": "install"], now: 20)
+        for value in [Double.nan, Double.infinity, -0.1, 1.1, 0.4] {
+            state.receive(["operationID": "new", "kind": "progress", "value": value], now: 20)
+        }
+        XCTAssertEqual(state, before)
+        state.status = .failed
+        state.receive(["operationID": "new", "kind": "progress", "value": 1.0], now: 30)
+        XCTAssertEqual(state.status, .failed)
+        XCTAssertEqual(state.progress, 0.5)
+    }
+
+    func testSelfUpdateDoesNotClaimSuccessAtOneHundredPercent() {
+        var state = AnderSelfUpdateState()
+        state.restore(["operationID": "a", "version": "2.0", "status": "installed",
+                       "stage": "reopen", "progress": 1.0], runningVersion: "1.9")
+        XCTAssertEqual(state.status, .installed)
+        XCTAssertTrue(state.blocksNewUpdate)
+        state.restore(["operationID": "a", "version": "2.0", "status": "running",
+                       "stage": "install", "progress": 1.0], runningVersion: "2.0")
+        XCTAssertEqual(state.status, .verified)
+        XCTAssertFalse(state.blocksNewUpdate)
+    }
+
+    func testSelfUpdateRestoresUncertainInstallationAndAllowsOnlyConfirmedRetry() {
+        var state = AnderSelfUpdateState()
+        state.restore(["operationID": "a", "version": "2.0", "status": "uncertain",
+                       "stage": "install", "replacementStarted": true], runningVersion: "1.9")
+        XCTAssertTrue(state.blocksNewUpdate)
+        XCTAssertTrue(state.replacementStarted)
+        state.restore(["operationID": "a", "version": "2.0", "status": "failed",
+                       "failureKind": "updateNetworkFailed"], runningVersion: "1.9")
+        XCTAssertFalse(state.blocksNewUpdate)
+        XCTAssertEqual(state.failureKind, "updateNetworkFailed")
+    }
+
+    func testSelfUpdateStagesAndRecoveryMessagesHaveStableKeys() {
+        for (stage, key) in [("vpn", "Connection"), ("catalog", "Catalog"), ("download", "Download"),
+                             ("prepare", "Prepare"), ("install", "Install"), ("reopen", "Reopen")] {
+            XCTAssertEqual(AnderSelfUpdateState(stage: stage).stageKey, "lc.update.stage\(key)")
+        }
+        XCTAssertEqual(AnderErrorText.key(for: "updateNetworkFailed"), "lc.update.networkFailed")
+        XCTAssertEqual(AnderErrorText.key(for: "updateBackgroundRequired"), "lc.update.backgroundRequired")
+        XCTAssertEqual(AnderErrorText.key(for: "updateStorageFailed"), "lc.update.storageFailed")
+    }
+
     func testUpdatesManifestRequiresArtifactIntegrity() throws {
         let good = Data(#"{"anderstore":{"version":"1.6.23","url":"https://example.test/AnderStore.ipa","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","notes":"Fix"},"core":{"version":"1"},"liveContainer":{"version":"1"},"installer":{"version":"1"}}"#.utf8)
         XCTAssertEqual(AnderLatestUpdateParser.updatesManifest(good)?.version, "1.6.23")

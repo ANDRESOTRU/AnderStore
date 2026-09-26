@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import UIKit
 
 /// An error raised by Core, or while starting it. `kind` is stable and machine readable —
 /// the interface turns it into a localized message, never the other way round.
@@ -64,7 +65,7 @@ public final class AnderCoreService {
     }
 
     /// Bumped when the envelope itself changes shape. Core reports its own in `handshake`.
-    static let protocolVersion = 4
+    static let protocolVersion = 5
 
     /// Only these may be retried automatically after the connection dropped: everything else
     /// either talks to Apple or changes state, and a silent second attempt is how accounts get
@@ -76,6 +77,8 @@ public final class AnderCoreService {
     private static let requiredProtocolCommands: Set<String> = [
         "snapshot", "account.signIn", "account.submitCode", "account.status", "account.signOut",
         "self.update", "apps.refresh", "certificates.list", "certificates.active",
+        "update.status", "update.background",
+        "update.confirmVersion",
         "certificates.revoke", "certificates.importP12", "certificates.exportP12",
         "appIDs.list", "appIDs.delete", "profiles.list", "device.status"
     ]
@@ -103,6 +106,10 @@ public final class AnderCoreService {
     private var legacyRefresh: CheckedContinuation<Void, Error>?
     private var idleTimer: Timer?
     private var shutdownAcknowledged = false
+    private var backgroundObserver: NSObjectProtocol?
+    private var backgroundOperationID: String?
+    private var selfUpdateOperationID: String?
+    private var updateHandoffTask: UIBackgroundTaskIdentifier = .invalid
 
     private static let idleTimeout: TimeInterval = 90
     private static let launchTimeout: TimeInterval = 45
@@ -217,6 +224,7 @@ public final class AnderCoreService {
         let extensionItem = NSExtensionItem()
         extensionItem.userInfo = [
             "selected": "builtinSideStore",
+            "lcHomePath": lcHome,
             "bookmarks": [bookmarkData],
             "endpoint": listener.endpoint
         ]
@@ -300,6 +308,11 @@ public final class AnderCoreService {
     }
 
     private func teardown() {
+        endUpdateHandoffTask()
+        if let observer = backgroundObserver { NotificationCenter.default.removeObserver(observer) }
+        backgroundObserver = nil
+        backgroundOperationID = nil
+        selfUpdateOperationID = nil
         listener?.invalidate()
         listener = nil
         ext = nil
@@ -337,10 +350,25 @@ public final class AnderCoreService {
         var request = params
         request["cmd"] = command
         let requestID = UUID().uuidString
+        if command == "self.update" { selfUpdateOperationID = nil }
         noteActivity()
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[String: Any], Error>) in
             pending[requestID] = Pending(command: command, onEvent: onEvent, continuation: continuation)
             client.performRequest(request, requestID: requestID)
+            if ["update.status", "update.readiness", "update.background", "update.confirmVersion"].contains(command) {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    guard let self, let entry = self.pending.removeValue(forKey: requestID) else { return }
+                    entry.continuation.resume(throwing: AnderCoreError(kind: "updateTimedOut", message: "Core status check timed out"))
+                }
+            }
+            if command == "self.update" {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 900_000_000_000)
+                    guard let self, let entry = self.pending.removeValue(forKey: requestID) else { return }
+                    entry.continuation.resume(throwing: AnderCoreError(kind: "updateTimedOut", message: "Update needs reconciliation"))
+                }
+            }
         }
     }
 
@@ -411,11 +439,80 @@ public final class AnderCoreService {
     }
 
     func handleEvent(requestID: String, event: [String: Any]) {
+        if pending[requestID]?.command == "self.update", let id = event["operationID"] as? String {
+            selfUpdateOperationID = id
+        }
+        if pending[requestID]?.command == "self.update",
+           event["kind"] as? String == "backgroundRequired",
+           let operationID = event["operationID"] as? String {
+            backgroundHostForUpdate(operationID: operationID)
+        }
         pending[requestID]?.onEvent?(event)
+    }
+
+    private func backgroundHostForUpdate(operationID: String) {
+        guard backgroundOperationID != operationID else { return }
+        backgroundOperationID = operationID
+        endUpdateHandoffTask()
+        updateHandoffTask = UIApplication.shared.beginBackgroundTask(withName: "AnderSelfUpdateHandoff") { [weak self] in
+            Task { @MainActor in self?.endUpdateHandoffTask() }
+        }
+        if let observer = backgroundObserver { NotificationCenter.default.removeObserver(observer) }
+        let acknowledge: () -> Void = { [weak self] in
+            guard let self, self.backgroundOperationID == operationID else { return }
+            if let observer = self.backgroundObserver { NotificationCenter.default.removeObserver(observer) }
+            self.backgroundObserver = nil
+            // Acknowledge only a real background transition, never the suspend request.
+            Task { @MainActor in
+                defer { self.endUpdateHandoffTask() }
+                _ = try? await self.sendRequest("update.background", params: ["operationID": operationID], onEvent: nil)
+            }
+        }
+        if UIApplication.shared.applicationState == .background {
+            acknowledge()
+            return
+        }
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { _ in Task { @MainActor in acknowledge() } }
+        Task { @MainActor [weak self] in
+            // The update screen already explains this transition. Give its final
+            // installation message time to paint before moving to the Home Screen.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard self?.backgroundOperationID == operationID else { return }
+            _ = UIApplication.shared.perform(NSSelectorFromString("suspend"))
+        }
+    }
+
+    private func endUpdateHandoffTask() {
+        guard updateHandoffTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(updateHandoffTask)
+        updateHandoffTask = .invalid
     }
 
     func handleFinish(requestID: String, response: [String: Any]?, error: [String: Any]?) {
         guard let entry = pending.removeValue(forKey: requestID) else { return }
+        if entry.command == "update.status", error == nil,
+           let operationID = response?["operationID"] as? String,
+           operationID == selfUpdateOperationID,
+           let resultStatus = response?["status"] as? String,
+           ["installed", "failed"].contains(resultStatus) {
+            // A status reply can settle a lost completion, but only for the same
+            // operation. Late XPC callbacks are then ignored by removeValue.
+            let ids = pending.filter { $0.value.command == "self.update" }.map(\.key)
+            for id in ids {
+                let failure: [String: Any]? = resultStatus == "failed"
+                    ? ["kind": response?["failureKind"] as? String ?? "unknown", "message": ""] : nil
+                handleFinish(requestID: id, response: response, error: failure)
+            }
+        }
+        if entry.command == "self.update" {
+            endUpdateHandoffTask()
+            if let observer = backgroundObserver { NotificationCenter.default.removeObserver(observer) }
+            backgroundObserver = nil
+            backgroundOperationID = nil
+            selfUpdateOperationID = nil
+        }
         noteActivity()
         if let error {
             entry.continuation.resume(throwing: AnderCoreError(payload: error))

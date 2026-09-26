@@ -135,7 +135,8 @@ final class InstallAppOperation: BasePipelineOperation<InstallAppOperationContex
             
             // This preserves our data in a serilized format that will be restored at boot onyl if installtion actually completed indicated by embedded provision uuid being different.
             let isSelfReinstall = !isDifferentSideStore &&
-                                   installedApp.storeApp?.bundleIdentifier.range(of: Bundle.Info.appbundleIdentifier) != nil
+                (self.context.handler.prepareSelfInstallation != nil ||
+                 installedApp.storeApp?.bundleIdentifier.range(of: Bundle.Info.appbundleIdentifier) != nil)
             if isSelfReinstall {
                 if let _ = provisioningProfiles[self.context.targetBundleIdentifier],
                    let appGroup = Bundle.main.altstoreAppGroup,
@@ -169,7 +170,13 @@ final class InstallAppOperation: BasePipelineOperation<InstallAppOperationContex
         
         // Self-reinstall background suspension
         if isSelfReinstall {
-            self.handleSelfReinstallation(for: installedApp)
+            if let prepare = context.handler.prepareSelfInstallation {
+                // Core is a separate process. Suspending its UIApplication does not
+                // background the host that iOS needs to replace.
+                try await prepare()
+            } else {
+                self.handleSelfReinstallation(for: installedApp)
+            }
         }
         
         // Phase 2: App installation

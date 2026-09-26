@@ -13,6 +13,196 @@ import CoreData
 import SideSign
 import MinimuxerCommon
 
+/// Only Core writes this journal. LC_HOME_PATH is the host home even in LiveProcess;
+/// atomic writes let a freshly launched host read it while Core finishes installation.
+private final class AnderCoreUpdateSession: @unchecked Sendable {
+    private let lock = NSLock()
+    private let onEvent: ([String: Any]) -> Void
+    private var record: [String: Any]
+    private var backgroundAcknowledged = false
+    private var lastWrite: TimeInterval = 0
+    private var group: RefreshGroup?
+    private var cancellationRequested = false
+    let notificationsAllowed: Bool
+    let notificationTitle: String
+    let notificationBody: String
+    let runningVersion: String
+
+    private static var journalURL: URL? {
+        guard let path = getenv("LC_HOME_PATH") else { return nil }
+        return URL(fileURLWithPath: String(cString: path)).appendingPathComponent("Documents/SideStore/AnderStoreUpdate.json")
+    }
+
+    static func readJournal() -> [String: Any]? {
+        guard let url = journalURL, let data = try? Data(contentsOf: url) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    static func confirmJournal(version: String) throws {
+        guard var saved = readJournal(), saved["version"] as? String == version,
+              let url = journalURL else { return }
+        saved["status"] = "verified"
+        let data = try JSONSerialization.data(withJSONObject: saved)
+        try data.write(to: url, options: .atomic)
+    }
+
+    func confirmRunningVersion(_ version: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard record["version"] as? String == version,
+              record["status"] as? String != "running" else { return }
+        record["status"] = "verified"
+        try saveLocked()
+    }
+
+    init(request: [String: Any], onEvent: @escaping ([String: Any]) -> Void) throws {
+        self.onEvent = onEvent
+        notificationsAllowed = request["notificationsAllowed"] as? Bool ?? false
+        notificationTitle = request["notificationTitle"] as? String ?? "AnderStore"
+        notificationBody = request["notificationBody"] as? String ?? ""
+        runningVersion = request["runningVersion"] as? String ?? ""
+        record = ["operationID": UUID().uuidString, "version": request["version"] as? String ?? "",
+                  "status": "running", "stage": "catalog", "progress": 0.0,
+                  "lastAdvanceAt": Date().timeIntervalSince1970,
+                  "startedAt": Date().timeIntervalSince1970, "replacementStarted": false]
+        try saveLocked(replacingJournal: true)
+    }
+
+    var isRunning: Bool { lock.lock(); defer { lock.unlock() }; return record["status"] as? String == "running" }
+
+    func snapshot() -> [String: Any] {
+        lock.lock(); defer { lock.unlock() }
+        var result = record
+        result["active"] = record["status"] as? String == "running"
+        return result
+    }
+
+    func setTargetVersion(_ version: String) {
+        lock.lock(); defer { lock.unlock() }
+        record["version"] = version
+        try? saveLocked()
+    }
+
+    func emit(_ event: [String: Any]) {
+        lock.lock()
+        guard record["status"] as? String == "running" else { lock.unlock(); return }
+        let now = Date().timeIntervalSince1970
+        var advanced = false
+        if event["kind"] as? String == "stage", let stage = event["value"] as? String,
+           stage != record["stage"] as? String {
+            record["stage"] = stage
+            advanced = true
+        }
+        if event["kind"] as? String == "progress", let value = event["value"] as? Double,
+           value.isFinite, value > (record["progress"] as? Double ?? 0) {
+            record["progress"] = min(1, value)
+            advanced = true
+        }
+        if advanced { record["lastAdvanceAt"] = now }
+        if advanced && (event["kind"] as? String == "stage" || now - lastWrite >= 0.5) {
+            try? saveLocked()
+        }
+        var payload = event
+        payload["operationID"] = record["operationID"]
+        lock.unlock()
+        onEvent(payload)
+    }
+
+    func acknowledgeBackground(id: String) {
+        lock.lock(); defer { lock.unlock() }
+        if id == record["operationID"] as? String { backgroundAcknowledged = true }
+    }
+
+    private func isBackgroundAcknowledged() -> Bool {
+        lock.lock(); defer { lock.unlock() }; return backgroundAcknowledged
+    }
+
+    func prepareInstallation() async throws {
+        // Persist BEFORE asking the host to leave. Abort if data cannot be saved.
+        let id = try persistBeforeSuspension()
+        onEvent(["kind": "backgroundRequired", "operationID": id])
+        let deadline = Date().addingTimeInterval(15)
+        while !isBackgroundAcknowledged() {
+            guard Date() < deadline else {
+                throw NSError(domain: "AnderStoreUpdate", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "The host did not enter the background"])
+            }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+        try markReplacementStarted()
+    }
+
+    private func persistBeforeSuspension() throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        let id = record["operationID"] as? String ?? ""
+        record["stage"] = "install"
+        try saveLocked()
+        return id
+    }
+
+    private func markReplacementStarted() throws {
+        lock.lock(); defer { lock.unlock() }
+        record["replacementStarted"] = true
+        try saveLocked()
+    }
+
+    func finish(response: [String: Any]?, error: [String: Any]?) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard record["status"] as? String == "running" else { return false }
+        record["status"] = error == nil ? "installed" : "failed"
+        record["stage"] = error == nil ? "reopen" : record["stage"]
+        record["failureKind"] = error?["kind"] as? String
+        if cancellationRequested && error != nil { record["failureKind"] = "updateTimedOut" }
+        group = nil
+        // Even when this write fails, the journal already contains the target version;
+        // the newly running host can verify it without trusting the completion event.
+        try? saveLocked()
+        return true
+    }
+
+    func attach(_ group: RefreshGroup) {
+        lock.lock(); defer { lock.unlock() }; self.group = group
+    }
+
+    /// Returns true only if no pipeline was started. Once running, cancellation
+    /// must be acknowledged by its completion before Retry becomes available.
+    func cancelIfStalled(now: TimeInterval) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard record["status"] as? String == "running",
+              record["replacementStarted"] as? Bool != true,
+              (now - (record["lastAdvanceAt"] as? Double ?? now) >= 180 ||
+               now - (record["startedAt"] as? Double ?? now) >= 900) else { return false }
+        cancellationRequested = true
+        group?.cancel()
+        return group == nil
+    }
+
+    func recordLaunch(id: String, opened: Bool) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard record["operationID"] as? String == id,
+              let saved = Self.readJournal(), saved["operationID"] as? String == id,
+              saved["status"] as? String != "verified" else { return false }
+        record["opened"] = opened
+        try? saveLocked()
+        return !opened
+    }
+
+    private func saveLocked(replacingJournal: Bool = false) throws {
+        guard let url = Self.journalURL else {
+            throw NSError(domain: "AnderStoreUpdate", code: 2, userInfo: [NSLocalizedDescriptionKey: "Host data folder unavailable"])
+        }
+        if !replacingJournal, let saved = Self.readJournal(),
+           saved["operationID"] as? String != record["operationID"] as? String {
+            // A later Core must not have its journal overwritten by an old callback.
+            throw NSError(domain: "AnderStoreUpdate", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "A newer update owns the journal"])
+        }
+        let data = try JSONSerialization.data(withJSONObject: record)
+        try data.write(to: url, options: .atomic)
+        lastWrite = Date().timeIntervalSince1970
+    }
+}
+
 @objc(AnderCoreBridge)
 final class AnderCoreBridge: NSObject {
 
@@ -23,7 +213,7 @@ final class AnderCoreBridge: NSObject {
     private static let anderStoreCatalogBundleIdentifier = "com.kdt.livecontainer"
 
     /// Bumped together with AnderCoreService.protocolVersion when the envelope changes shape.
-    private static let protocolVersion = 4
+    private static let protocolVersion = 5
 
     private static let commands: [String] = [
         "handshake",
@@ -34,6 +224,10 @@ final class AnderCoreBridge: NSObject {
         "account.resetAnisette",
         "snapshot",
         "self.update",
+        "update.status",
+        "update.background",
+        "update.launchResult",
+        "update.confirmVersion",
         "apps.refresh",
         "certificates.list",
         "certificates.active",
@@ -48,6 +242,7 @@ final class AnderCoreBridge: NSObject {
     ]
 
     nonisolated(unsafe) private static var activeSignIn: XPCSignInHandler?
+    nonisolated(unsafe) private static var updateSession: AnderCoreUpdateSession?
 
     // MARK: - Envelope
 
@@ -106,9 +301,90 @@ final class AnderCoreBridge: NSObject {
             snapshot(fields: fields) { result in completion(result, nil) }
 
         case "self.update":
-            updateSelf(expectedVersion: request["version"] as? String,
-                       onEvent: onEvent,
-                       completion: completion)
+            DispatchQueue.main.async {
+                if updateSession?.isRunning == true {
+                    completion(nil, ["kind": "updateBusy", "message": "An update is already running"])
+                    return
+                }
+                // A replaced Core cannot prove whether iOS finished a pending install.
+                // Keep this locked until the new host confirms its version.
+                if updateSession == nil,
+                   let saved = AnderCoreUpdateSession.readJournal(),
+                   saved["status"] as? String == "running",
+                   saved["replacementStarted"] as? Bool == true {
+                    completion(nil, ["kind": "updateUncertain", "message": "Open AnderStore to verify the installed version"])
+                    return
+                }
+                do {
+                    let session = try AnderCoreUpdateSession(request: request, onEvent: onEvent)
+                    updateSession = session
+                    Task { @MainActor in
+                        while session.isRunning {
+                            try? await Task.sleep(nanoseconds: 5_000_000_000)
+                            if session.cancelIfStalled(now: Date().timeIntervalSince1970) {
+                                let failure: [String: Any] = ["kind": "updateTimedOut", "message": "No update progress"]
+                                if session.finish(response: nil, error: failure) { completion(nil, failure) }
+                            }
+                        }
+                    }
+                    updateSelf(expectedVersion: request["version"] as? String,
+                               session: session,
+                               onEvent: session.emit,
+                               completion: { response, error in
+                        guard session.finish(response: response, error: error) else { return }
+                        var result = response
+                        if error == nil {
+                            result?["operationID"] = session.snapshot()["operationID"]
+                            result?["reopen"] = response?["version"] as? String != request["runningVersion"] as? String
+                            result?["notificationsAllowed"] = session.notificationsAllowed
+                            result?["notificationTitle"] = session.notificationTitle
+                            result?["notificationBody"] = session.notificationBody
+                        }
+                        completion(result, error)
+                    })
+                } catch {
+                    completion(nil, ["kind": "updateStorageFailed", "message": error.localizedDescription])
+                }
+            }
+
+        case "update.status":
+            DispatchQueue.main.async {
+                if let session = updateSession {
+                    completion(session.snapshot(), nil)
+                } else if var saved = AnderCoreUpdateSession.readJournal() {
+                    saved["active"] = false
+                    if saved["status"] as? String == "running" {
+                        saved["status"] = saved["replacementStarted"] as? Bool == true ? "uncertain" : "failed"
+                        saved["failureKind"] = "terminated"
+                    }
+                    completion(saved, nil)
+                } else {
+                    completion(["status": "idle", "active": false], nil)
+                }
+            }
+
+        case "update.background":
+            DispatchQueue.main.async {
+                updateSession?.acknowledgeBackground(id: request["operationID"] as? String ?? "")
+                completion([:], nil)
+            }
+
+        case "update.launchResult":
+            DispatchQueue.main.async {
+                let notify = updateSession?.recordLaunch(id: request["operationID"] as? String ?? "",
+                                                       opened: request["opened"] as? Bool ?? false) ?? false
+                completion(["notify": notify], nil)
+            }
+
+        case "update.confirmVersion":
+            DispatchQueue.main.async {
+                do {
+                    let version = request["version"] as? String ?? ""
+                    if let session = updateSession { try session.confirmRunningVersion(version) }
+                    else { try AnderCoreUpdateSession.confirmJournal(version: version) }
+                    completion([:], nil)
+                } catch { completion(nil, ["kind": "updateStorageFailed", "message": error.localizedDescription]) }
+            }
 
         case "apps.refresh":
             refreshApps(onEvent: onEvent, completion: completion)
@@ -182,7 +458,7 @@ final class AnderCoreBridge: NSObject {
     @objc(prepareForShutdownWithReason:completion:)
     static func prepareForShutdown(reason: String, completion: @escaping (Bool) -> Void) {
         DispatchQueue.main.async {
-            if AppManager.shared.isActivelyManagingAnyApp || activeSignIn != nil {
+            if AppManager.shared.isActivelyManagingAnyApp || activeSignIn != nil || updateSession?.isRunning == true {
                 completion(false)
                 return
             }
@@ -339,6 +615,7 @@ final class AnderCoreBridge: NSObject {
 
     /// Updates AnderStore itself from the AnderStore source (store.andresot.uk/source.json).
     private static func updateSelf(expectedVersion: String?,
+                                   session: AnderCoreUpdateSession,
                                    onEvent: @escaping ([String: Any]) -> Void,
                                    completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
         // Fail fast with the real reason instead of hanging somewhere in the install pipeline.
@@ -356,6 +633,7 @@ final class AnderCoreBridge: NSObject {
         onEvent(["kind": "stage", "value": "catalog"])
         AppManager.shared.updateAllSources { sourceResult in
             DispatchQueue.main.async {
+                guard session.isRunning else { return }
                 if case .failure(let error) = sourceResult {
                     completion(nil, errorPayload(error))
                     return
@@ -389,20 +667,33 @@ final class AnderCoreBridge: NSObject {
                                      "message": "The requested AnderStore version is not available in the official catalog"])
                     return
                 }
-                guard targetVersion.version != installedApp.version else {
+                session.setTargetVersion(targetVersion.version)
+                // CoreData can already contain the target after a staged/failed
+                // reinstall. Only the running host can prove that it uses it.
+                guard targetVersion.version != session.runningVersion else {
                     completion(["updated": false, "version": targetVersion.version], nil)
                     return
                 }
 
-                onEvent(["kind": "stage", "value": "install"])
                 var observation: NSKeyValueObservation?
                 let updateProgress = AppManager.shared.update(installedApp,
                                                                to: targetVersion,
-                                                               presentingViewController: nil) { result in
+                                                               presentingViewController: nil,
+                                                               stageHandler: { stage in
+                    session.emit(["kind": "stage", "value": stage])
+                },
+                                                               prepareSelfInstallation: {
+                    try await session.prepareInstallation()
+                }, operationCreated: { group in
+                    session.attach(group)
+                }) { result in
                     observation?.invalidate()
                     switch result {
                     case .success:
-                        completion(["updated": true, "version": targetVersion.version], nil)
+                        completion(["updated": true, "version": targetVersion.version,
+                                    "notificationTitle": session.notificationTitle,
+                                    "notificationBody": session.notificationBody,
+                                    "notificationsAllowed": session.notificationsAllowed], nil)
                     case .failure(let error):
                         completion(nil, errorPayload(error))
                     }
@@ -758,6 +1049,11 @@ final class AnderCoreBridge: NSObject {
 
         if kind == "unknown" {
             let nsError = error as NSError
+            if nsError.domain == "AnderStoreUpdate" {
+                kind = nsError.code == 1 ? "updateBackgroundRequired" : "updateStorageFailed"
+            } else if nsError.domain == NSURLErrorDomain {
+                kind = "updateNetworkFailed"
+            }
             let diagnosticParts = [
                 error.localizedDescription,
                 String(reflecting: error),

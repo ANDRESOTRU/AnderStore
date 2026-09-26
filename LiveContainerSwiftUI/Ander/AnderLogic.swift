@@ -180,6 +180,14 @@ enum AnderErrorText {
             return "lc.update.notTracked"
         case "updateTimedOut":
             return "lc.update.timedOut"
+        case "updateBusy", "updateUncertain":
+            return "lc.update.uncertain"
+        case "updateStorageFailed":
+            return "lc.update.storageFailed"
+        case "updateBackgroundRequired":
+            return "lc.update.backgroundRequired"
+        case "updateNetworkFailed":
+            return "lc.update.networkFailed"
         case "terminated", "startTimeout":
             return "lc.account.errorCoreStopped"
         case "invalidCertificate":
@@ -250,6 +258,65 @@ enum AnderUpdateWatchdogPolicy {
                            lastEventAt: TimeInterval,
                            now: TimeInterval) -> Bool {
         now - lastEventAt >= stallLimit || now - startedAt >= totalLimit
+    }
+}
+
+/// An installed file is not success until a process runs the target version.
+struct AnderSelfUpdateState: Equatable {
+    enum Status: String { case idle, running, installed, verified, failed, uncertain }
+    var operationID = ""
+    var version = ""
+    var status: Status = .idle
+    var stage = "vpn"
+    var progress: Double?
+    var lastAdvanceAt: TimeInterval = 0
+    var replacementStarted = false
+    var failureKind: String?
+
+    var blocksNewUpdate: Bool { [.running, .installed, .uncertain].contains(status) }
+    var stageKey: String {
+        switch stage {
+        case "vpn": return "lc.update.stageConnection"
+        case "catalog": return "lc.update.stageCatalog"
+        case "download": return "lc.update.stageDownload"
+        case "prepare": return "lc.update.stagePrepare"
+        case "install": return "lc.update.stageInstall"
+        case "reopen": return "lc.update.stageReopen"
+        default: return "lc.update.stageCheckStatus"
+        }
+    }
+    func isDelayed(now: TimeInterval) -> Bool {
+        status == .running && now - lastAdvanceAt >= 30
+    }
+    mutating func receive(_ event: [String: Any], now: TimeInterval) {
+        guard status == .running, let id = event["operationID"] as? String,
+              operationID.isEmpty || operationID == id else { return }
+        operationID = id
+        if event["kind"] as? String == "stage", let next = event["value"] as? String, next != stage {
+            stage = next
+            progress = nil
+            lastAdvanceAt = now
+        }
+        if event["kind"] as? String == "progress", let value = event["value"] as? Double,
+           value.isFinite, value >= 0, value <= 1, value > (progress ?? -1) {
+            progress = value
+            lastAdvanceAt = now
+        }
+    }
+    mutating func restore(_ payload: [String: Any], runningVersion: String) {
+        guard let target = payload["version"] as? String, !target.isEmpty,
+              let id = payload["operationID"] as? String else { return }
+        operationID = id
+        version = target
+        stage = payload["stage"] as? String ?? "catalog"
+        status = Status(rawValue: payload["status"] as? String ?? "uncertain") ?? .uncertain
+        lastAdvanceAt = payload["lastAdvanceAt"] as? Double ?? 0
+        replacementStarted = payload["replacementStarted"] as? Bool ?? false
+        failureKind = payload["failureKind"] as? String
+        if let value = payload["progress"] as? Double, value.isFinite, (0...1).contains(value) {
+            progress = value
+        } else { progress = nil }
+        if target == runningVersion { status = .verified; stage = "reopen" }
     }
 }
 
