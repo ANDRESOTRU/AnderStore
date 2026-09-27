@@ -1,6 +1,346 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "lc.store.errorRecovery": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Could not restore an interrupted installation. Restart AnderStore. If this happens again, contact support before reinstalling the app."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Не удалось восстановить прерванную установку. Перезапустите AnderStore. Если ошибка повторяется, обратитесь за помощью перед переустановкой приложения."
+        }
+      }
+    }
+  },
+  "lc.store.download": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Download"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Загрузить"
+        }
+      }
+    }
+  },
+  "lc.store.manageSources": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Manage sources"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Управление источниками"
+        }
+      }
+    }
+  },
+  "lc.store.catalogError": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Could not refresh the catalog. Check your connection and try again. Saved apps are still shown."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Не удалось обновить каталог. Проверьте интернет и повторите попытку. Сохранённый список остаётся доступен."
+        }
+      }
+    }
+  },
+  "lc.store.retry": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Try again"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Повторить попытку"
+        }
+      }
+    }
+  },
+  "lc.store.installExplanation": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "The app will be installed inside AnderStore. You can add a Home Screen icon afterwards."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Приложение будет установлено внутри AnderStore. После установки можно добавить значок на экран «Домой»."
+        }
+      }
+    }
+  },
+  "lc.store.pause": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Pause download"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Приостановить загрузку"
+        }
+      }
+    }
+  },
+  "lc.store.resume": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Resume download"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Продолжить загрузку"
+        }
+      }
+    }
+  },
+  "lc.store.stage.resolving": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Checking the download link…"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Проверяем ссылку для загрузки…"
+        }
+      }
+    }
+  },
+  "lc.store.stage.downloading": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Downloading…"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Скачиваем…"
+        }
+      }
+    }
+  },
+  "lc.store.stage.paused": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Download paused"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Загрузка приостановлена"
+        }
+      }
+    }
+  },
+  "lc.store.stage.verifying": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Checking the file…"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Проверяем файл…"
+        }
+      }
+    }
+  },
+  "lc.store.stage.preparing": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Preparing the app…"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Подготавливаем приложение…"
+        }
+      }
+    }
+  },
+  "lc.store.stage.installing": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Installing…"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Устанавливаем…"
+        }
+      }
+    }
+  },
+  "lc.store.delayed": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "This step is taking longer. Keep AnderStore open while installation finishes."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Этот этап занимает больше времени. Оставьте AnderStore открытым до завершения установки."
+        }
+      }
+    }
+  },
+  "lc.store.errorFile": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "The downloaded file could not be verified. Try downloading it again. If this happens again, contact the source owner."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Загруженный файл не прошёл проверку. Скачайте его ещё раз. Если ошибка повторяется, сообщите владельцу источника."
+        }
+      }
+    }
+  },
+  "lc.store.errorSignature": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Could not prepare the app signature. Open Device, check your account and refresh the signature, then try again."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Не удалось подготовить подпись приложения. Откройте «Устройство», проверьте аккаунт и обновите подпись, затем повторите установку."
+        }
+      }
+    }
+  },
+  "lc.store.errorNetwork": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Could not download the app. Check your internet connection and try again."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Не удалось скачать приложение. Проверьте интернет и повторите попытку."
+        }
+      }
+    }
+  },
+  "lc.store.errorRetry": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Try installing again. If the problem continues, choose another compatible app or contact the source owner."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Повторите установку. Если ошибка повторяется, выберите другое совместимое приложение или сообщите владельцу источника."
+        }
+      }
+    }
+  },
+  "lc.store.replace": {
+    "extractionState": "manual",
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Update existing copy: %@"
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Обновить установленную копию: %@"
+        }
+      }
+    }
+  },
   "lc.tools.enabled": {
     "extractionState": "manual",
     "localizations": {

@@ -3,6 +3,136 @@ import XCTest
 @testable import AnderLogic
 
 final class AnderLogicTests: XCTestCase {
+    func testInstallDownloadPauseIgnoresLateAndForeignProgress() {
+        let start = Date(timeIntervalSince1970: 100)
+        var operation = AnderInstallOperation(now: start)
+        let id = operation.id
+        operation.recordDownload(bytes: 25, expected: 100, operationID: id, now: start)
+        XCTAssertEqual(operation.fraction, 0.25)
+        XCTAssertTrue(operation.transition(.paused, operationID: id, now: start))
+        operation.recordDownload(bytes: 50, expected: 100, operationID: id)
+        XCTAssertEqual(operation.downloadedBytes, 25)
+        XCTAssertFalse(operation.isDelayed(now: start.addingTimeInterval(300)))
+        XCTAssertFalse(operation.transition(.downloading, operationID: UUID()))
+        XCTAssertTrue(operation.transition(.downloading, operationID: id, now: start.addingTimeInterval(300)))
+        operation.recordDownload(bytes: 50, expected: 100, operationID: UUID())
+        XCTAssertEqual(operation.downloadedBytes, 25)
+        operation.recordDownload(bytes: 50, expected: 100, operationID: id)
+        XCTAssertEqual(operation.fraction, 0.5)
+    }
+
+    func testInstallUnknownSizeAndDelayFollowRealProgress() {
+        let start = Date(timeIntervalSince1970: 100)
+        var operation = AnderInstallOperation(now: start)
+        operation.recordDownload(bytes: 5, expected: -1, operationID: operation.id, now: start)
+        XCTAssertNil(operation.fraction)
+        XCTAssertFalse(operation.isDelayed(now: start.addingTimeInterval(29)))
+        XCTAssertTrue(operation.isDelayed(now: start.addingTimeInterval(30)))
+        operation.recordDownload(bytes: 6, expected: 100, operationID: operation.id, now: start.addingTimeInterval(30))
+        XCTAssertFalse(operation.isDelayed(now: start.addingTimeInterval(31)))
+        operation.recordDownload(bytes: 4, expected: 100, operationID: operation.id)
+        XCTAssertEqual(operation.downloadedBytes, 6)
+    }
+
+    func testInstallOnlyCommittedReplacementCanSucceed() {
+        var operation = AnderInstallOperation()
+        let id = operation.id
+        operation.recordDownload(bytes: 100, expected: 100, operationID: id)
+        XCTAssertEqual(operation.stage, .downloading) // 100% downloaded is not installed.
+        XCTAssertFalse(operation.transition(.succeeded, operationID: id))
+        XCTAssertTrue(operation.transition(.verifying, operationID: id))
+        XCTAssertNil(operation.fraction)
+        XCTAssertTrue(operation.transition(.preparing, operationID: id))
+        XCTAssertFalse(operation.transition(.paused, operationID: id))
+        XCTAssertTrue(operation.transition(.installing, operationID: id))
+        XCTAssertFalse(operation.transition(.cancelled, operationID: id))
+        XCTAssertTrue(operation.transition(.succeeded, operationID: id))
+        XCTAssertFalse(operation.transition(.failed, operationID: id))
+        operation.recordDownload(bytes: 0, expected: 0, operationID: id)
+        XCTAssertEqual(operation.stage, .succeeded)
+    }
+
+    func testCancelledAndFailedInstallCannotBeRevivedByLateEvents() {
+        for stage in [AnderInstallOperation.Stage.cancelled, .failed] {
+            var old = AnderInstallOperation()
+            let oldID = old.id
+            XCTAssertTrue(old.transition(stage, operationID: oldID))
+            XCTAssertFalse(old.transition(.verifying, operationID: oldID))
+            var next = AnderInstallOperation()
+            next.recordDownload(bytes: 50, expected: 100, operationID: oldID)
+            XCTAssertNil(next.fraction)
+            XCTAssertFalse(next.transition(.failed, operationID: oldID))
+            XCTAssertEqual(next.stage, .downloading)
+        }
+    }
+
+    func testPreparationProgressResetsDelayWithoutInventingPercentage() {
+        let start = Date(timeIntervalSince1970: 100)
+        var operation = AnderInstallOperation(stage: .verifying, now: start)
+        let id = operation.id
+        XCTAssertTrue(operation.transition(.preparing, operationID: id, now: start))
+        operation.recordPreparation(fraction: 0.5, operationID: id, now: start.addingTimeInterval(29))
+        XCTAssertFalse(operation.isDelayed(now: start.addingTimeInterval(30)))
+        XCTAssertNil(operation.fraction)
+        operation.recordPreparation(fraction: 0.4, operationID: id, now: start.addingTimeInterval(58))
+        XCTAssertTrue(operation.isDelayed(now: start.addingTimeInterval(59)))
+    }
+
+    func testInterruptedReplacementRestoresOldCopyBeforeLoadingApps() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = root.appendingPathComponent("App.app")
+        let prepared = root.appendingPathComponent("Prepared.app")
+        try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: prepared, withIntermediateDirectories: true)
+        try "old".write(to: old.appendingPathComponent("marker"), atomically: true, encoding: .utf8)
+        try "new".write(to: prepared.appendingPathComponent("marker"), atomically: true, encoding: .utf8)
+        try AnderBundleSwap(destination: old).installPreparedBundle(from: prepared)
+        // No rollback/commit: simulate process termination after moving the new bundle.
+        try AnderBundleSwap.recoverInterrupted(in: root)
+        XCTAssertEqual(try String(contentsOf: old.appendingPathComponent("marker"), encoding: .utf8), "old")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["App.app"])
+        try AnderBundleSwap.recoverInterrupted(in: root) // Recovery is idempotent.
+    }
+
+    func testCommittedReplacementSurvivesRecovery() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = root.appendingPathComponent("App.app")
+        let prepared = root.appendingPathComponent("Prepared.app")
+        try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: prepared, withIntermediateDirectories: true)
+        try "old".write(to: old.appendingPathComponent("marker"), atomically: true, encoding: .utf8)
+        try "new".write(to: prepared.appendingPathComponent("marker"), atomically: true, encoding: .utf8)
+        let swap = AnderBundleSwap(destination: old)
+        try swap.installPreparedBundle(from: prepared)
+        try swap.commit()
+        try AnderBundleSwap.recoverInterrupted(in: root)
+        XCTAssertEqual(try String(contentsOf: old.appendingPathComponent("marker"), encoding: .utf8), "new")
+    }
+
+    func testInterruptedNewInstallIsNotReportedAsInstalled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("App.app")
+        let prepared = root.appendingPathComponent("Prepared.app")
+        try FileManager.default.createDirectory(at: prepared, withIntermediateDirectories: true)
+        try AnderBundleSwap(destination: destination).installPreparedBundle(from: prepared)
+        try AnderBundleSwap.recoverInterrupted(in: root)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
+    func testCompletedDownloadMayAdvanceWhenPauseArrivesAtSameTime() {
+        var operation = AnderInstallOperation()
+        let id = operation.id
+        XCTAssertTrue(operation.transition(.paused, operationID: id))
+        // URLSession already finished writing before the user pressed pause.
+        XCTAssertTrue(operation.transition(.verifying, operationID: id))
+        XCTAssertFalse(operation.transition(.paused, operationID: id))
+        XCTAssertTrue(operation.transition(.preparing, operationID: id))
+    }
+
     func testHomeLaunchParsesLegacyIconAndForwardedParameters() throws {
         let url = try XCTUnwrap(AnderHomeShortcutURL.make(bundleName: "Приложение Test.app", containerFolderName: "Данные & 1"))
         let request = try XCTUnwrap(AnderHomeLaunchRequest(url: url))

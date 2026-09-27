@@ -102,6 +102,7 @@ struct LCTabView: View {
             AnderUpdateChecker.checkIfNeeded()
             selfUpdater.checkStatus()
         }
+        .modifier(AnderInstallPresentation(downloader: downloadHelper))
         .downloadAlert(helper: downloadHelper)
         .environmentObject(downloadHelper)
         .alert("lc.common.error".loc, isPresented: $errorShow){

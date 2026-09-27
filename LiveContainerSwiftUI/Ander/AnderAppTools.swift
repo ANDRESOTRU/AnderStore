@@ -10,13 +10,16 @@ final class AnderAppTools: ObservableObject {
 
 struct AnderAppToolsView: View {
     @EnvironmentObject private var model: SharedModel
+    @State private var sourcesShown = false
     var body: some View {
         List {
+            Button { sourcesShown = true } label: { Label("lc.store.manageSources".loc, systemImage: "tray.full") }
             tool("lc.appList.installFromIpa", icon: "doc.badge.plus", .ipa)
             tool("lc.appList.installFromUrl", icon: "link.badge.plus", .installURL)
             tool("lc.appList.openLink", icon: "link", .web)
             tool("lc.tools.sort", icon: "arrow.up.arrow.down", .sort)
         }.navigationTitle("lc.tools.title".loc)
+        .sheet(isPresented: $sourcesShown) { AnderSourceManagementView() }
     }
     private func tool(_ title: String, icon: String, _ action: AnderAppTools.Tool) -> some View {
         Button {

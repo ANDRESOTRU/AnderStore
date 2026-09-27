@@ -7,77 +7,82 @@
 
 import SwiftUI
 
-public final class DownloadHelper : ObservableObject {
-    @Published var downloadProgress : Float = 0.0
-    @Published var downloadedSize : Int64 = 0
-    @Published var totalSize : Int64 = 0
+@MainActor
+public final class DownloadHelper: ObservableObject {
+    @Published var downloadProgress: Float = 0
+    @Published var downloadedSize: Int64 = 0
+    @Published var totalSize: Int64 = 0
     @Published var isDownloading = false
+    @Published var isPaused = false
     @Published var cancelled = false
+    @Published var showsDownloadOverlay = true
     private var downloadTask: URLSessionDownloadTask?
-    private var continuation: UnsafeContinuation<(), Never>?
-    
-    func download(url: URL, to: URL) async throws {
-        var ansError: Error? = nil
+    private var session: URLSession?
+    private var delegate: DownloadDelegate?
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var requestID: UUID?
 
-        await MainActor.run {
-            cancelled = false
-            
-            downloadProgress = 0.0
-            downloadedSize = 0
-            totalSize = 0
-            
-            isDownloading = true
-        }
-        
-        await withUnsafeContinuation { c in
+    func download(url: URL, to destination: URL, inline: Bool = false,
+                  onProgress: ((Int64, Int64) -> Void)? = nil) async throws {
+        guard !isDownloading else { throw URLError(.backgroundSessionInUseByAnotherProcess) }
+        let id = UUID()
+        requestID = id
+        cancelled = false; isPaused = false
+        downloadProgress = 0; downloadedSize = 0; totalSize = 0
+        showsDownloadOverlay = !inline
+        isDownloading = true
+        try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
             continuation = c
-            
-            let bgConfig = URLSessionConfiguration.background(withIdentifier: "com.livecontainer.download.\(UUID().uuidString)")
-            let session = URLSession(configuration: bgConfig, delegate: DownloadDelegate(progressCallback: { progress, downloaded, total in
-                Task{ await MainActor.run {
-                    self.downloadProgress = progress
-                    self.downloadedSize = downloaded
-                    self.totalSize = total
-                }}
-            }, completeCallback: {tempFileURL, error in
-                Task{ await MainActor.run {
-                    self.isDownloading = false
-                }}
-                if let error {
-                    print(error)
-                    ansError = error
+            let configuration = URLSessionConfiguration.background(withIdentifier: "com.livecontainer.download.\(id.uuidString)")
+            let delegate = DownloadDelegate(destination: destination, progressCallback: { bytes, total in
+                Task { @MainActor in
+                    guard self.requestID == id, !self.isPaused else { return }
+                    self.downloadedSize = bytes; self.totalSize = total
+                    self.downloadProgress = total > 0 ? min(1, Float(bytes) / Float(total)) : 0
+                    onProgress?(bytes, total)
                 }
-                if let tempFileURL {
-                    do {
-                        let fm = FileManager.default
-                        print(to)
-                        try fm.moveItem(at: tempFileURL, to: to)
-                    } catch {
-                        ansError = error
-                    }
-                }
-                if self.continuation != nil {
-                    c.resume()
-                }
-
-            }), delegateQueue: .main)
-
+            }, completeCallback: { error in
+                Task { @MainActor in self.finish(id: id, error: error) }
+            })
+            let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: .main)
+            self.delegate = delegate
+            self.session = session
             downloadTask = session.downloadTask(with: url)
             downloadTask?.resume()
         }
-        if let ansError {
-            throw ansError
-        }
     }
-    
-    func cancel() {
-        if let continuation {
-            continuation.resume()
-        }
-        cancelled = true
+
+    private func finish(id: UUID, error: Error?) {
+        guard requestID == id else { return }
+        // Clear ownership before resuming: completion and cancellation may both arrive.
+        requestID = nil
+        let pending = continuation
         continuation = nil
+        isDownloading = false; isPaused = false
+        downloadTask = nil
+        delegate = nil
+        session?.finishTasksAndInvalidate(); session = nil
+        if let error { pending?.resume(throwing: error) } else { pending?.resume() }
+    }
+
+    func pause() {
+        guard isDownloading, !isPaused else { return }
+        isPaused = true
+        downloadTask?.suspend()
+    }
+
+    func resume() {
+        guard isDownloading, isPaused else { return }
+        isPaused = false
+        downloadTask?.resume()
+    }
+
+    func cancel() {
+        guard let id = requestID else { return }
+        cancelled = true
+        delegate?.abandon()
         downloadTask?.cancel()
-        isDownloading = false
+        finish(id: id, error: URLError(.cancelled))
     }
 }
 
@@ -141,50 +146,60 @@ public struct DownloadAlertModifier: ViewModifier {
         }
         .onChange(of: helper.isDownloading) { newVal in
             withAnimation(.easeInOut(duration: 0.1)) {
-                show = newVal
+                show = newVal && helper.showsDownloadOverlay
             }
         }
     }
 }
 
+/// URLSession calls this delegate on its serial main queue. Move the temporary file before
+/// returning from didFinishDownloadingTo; its URL expires when that callback returns.
 class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
-    let progressCallback: (Float, Int64, Int64) -> Void
-    let completeCallback: (URL?, Error?) -> Void
+    let destination: URL
+    let progressCallback: (Int64, Int64) -> Void
+    let completeCallback: (Error?) -> Void
+    private var finished = false
 
-    init(progressCallback: @escaping (Float, Int64, Int64) -> Void,
-         completeCallback: @escaping (URL?, Error?) -> Void) {
+    init(destination: URL, progressCallback: @escaping (Int64, Int64) -> Void,
+         completeCallback: @escaping (Error?) -> Void) {
+        self.destination = destination
         self.progressCallback = progressCallback
         self.completeCallback = completeCallback
     }
 
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
-        progressCallback(progress, totalBytesWritten, totalBytesExpectedToWrite)
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+                    totalBytesExpectedToWrite: Int64) {
+        guard !finished else { return }
+        progressCallback(totalBytesWritten, totalBytesExpectedToWrite)
     }
 
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        if let httpResponse = downloadTask.response as? HTTPURLResponse {
-            let statusCode = httpResponse.statusCode
+    func abandon() { finished = true }
 
-            // Check if the status code is in the 2xx range
-            if (200...299).contains(statusCode) {
-                completeCallback(location, nil)
-            } else {
-                completeCallback(location, NSError(domain: "", code: statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP Error: \(statusCode)"]))
-            }
-        } else {
-            completeCallback(location, NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"]))
+    private func finish(_ error: Error?) {
+        guard !finished else { return }
+        finished = true
+        completeCallback(error)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didFinishDownloadingTo location: URL) {
+        guard !finished else { return }
+        guard let response = downloadTask.response as? HTTPURLResponse else {
+            finish(URLError(.badServerResponse)); return
         }
-        
-
+        guard (200...299).contains(response.statusCode) else {
+            finish(NSError(domain: "AnderDownloadHTTP", code: response.statusCode,
+                           userInfo: [NSLocalizedDescriptionKey: "HTTP \(response.statusCode)"])); return
+        }
+        do {
+            try FileManager.default.moveItem(at: location, to: destination)
+            finish(nil)
+        } catch { finish(error) }
     }
-    
+
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let error {
-            completeCallback(nil, error)
-        } else {
-
-        }
+        if let error { finish(error) }
     }
 }
 

@@ -127,7 +127,7 @@ final class AnderCatalogStore: ObservableObject {
     }
     
     func refreshAllSources() async {
-        guard !sources.isEmpty else {
+        guard !isRefreshingAll, !sources.isEmpty else {
             return
         }
         isRefreshingAll = true

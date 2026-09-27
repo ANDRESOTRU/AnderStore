@@ -85,8 +85,6 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     @ObservedObject var installer = AnderInstaller.shared
     @ObservedObject private var catalog = AnderCatalogStore.shared
     
-    @State var installOptions: [AppReplaceOption]
-    @StateObject var installReplaceAlert = AlertHelper<AppReplaceOption>()
     
     @State var webViewOpened = false
     @State var webViewURL : URL = URL(string: "about:blank")!
@@ -121,7 +119,6 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     /// Long-press → uninstall, confirmed in two steps like the old banner did.
     @State private var uninstallTarget: LCAppModel?
     @State private var uninstallDataTarget: LCAppModel?
-    @State private var shortcutOffer: LCAppModel?
     
     @ObservedObject var searchContext: SearchContext = SearchContext()
     var sortedApps: [LCAppModel] {
@@ -165,7 +162,6 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     }
     
     init() {
-        _installOptions = State(initialValue: [])
     }
     
     var body: some View {
@@ -255,13 +251,15 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                     }
 
                     let appCount = sharedModel.isHiddenAppUnlocked ? filteredApps.count + filteredHiddenApps.count : filteredApps.count
-                    Text(appCount > 0 || searchContext.debouncedQuery != "" ? "lc.appList.appCounter %lld".localizeWithFormat(appCount) : (sharedModel.multiLCStatus == 2 ? "lc.appList.convertToSharedToShowInLC2".loc : "lc.appList.installTip".loc))
-                        .padding(.horizontal)
-                        .foregroundStyle(.gray)
-                        .animation(searchContext.isTyping ? nil : .easeInOut, value: appCount)
-                        .onTapGesture(count: 3) {
-                            Task { await authenticateUser() }
-                        }
+                    if appCount == 0 && searchContext.debouncedQuery.isEmpty {
+                        Text(sharedModel.multiLCStatus == 2 ? "lc.appList.convertToSharedToShowInLC2".loc : "lc.appList.installTip".loc)
+                            .padding(.horizontal)
+                            .foregroundStyle(.gray)
+                            .animation(searchContext.isTyping ? nil : .easeInOut, value: appCount)
+                            .onTapGesture(count: 3) {
+                                Task { await authenticateUser() }
+                            }
+                    }
                 }.animation(searchContext.isTyping ? nil : .easeInOut, value: LCUtils.appGroupUserDefault.bool(forKey: "LCStrictHiding"))
 
                 if sharedModel.multiLCStatus == 2 {
@@ -272,20 +270,10 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             .navigationBarProgressBar(show: $installer.progressVisible, progress: $installer.progressValue)
             .coordinateSpace(name: "scroll")
             .onAppear {
-                bindInstaller()
                 if !didAppear {
                     onAppear()
                 }
             }
-            .onReceive(installer.$errorMessage.compactMap { $0 }) { message in
-                errorInfo = message
-                errorShow = true
-                installer.errorMessage = nil
-            }
-            .onReceive(installer.$pendingShortcutApp.compactMap { $0 }) { app in
-                shortcutOffer = app
-            }
-            
             .navigationTitle("lc.tabView.apps".loc)
             .navigationBarTitleDisplayMode(.inline)
 
@@ -340,44 +328,11 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         } message: {
             Text("lc.appBanner.deleteDataMsg %@".localizeWithFormat(uninstallDataTarget?.appInfo.displayName() ?? ""))
         }
-        .alert("lc.shortcut.offerTitle".loc,
-               isPresented: Binding(get: { shortcutOffer != nil },
-                                    set: { if !$0 { shortcutOffer = nil; installer.consumeShortcutOffer() } })) {
-            Button("lc.shortcut.add".loc) {
-                guard let app = shortcutOffer else { return }
-                shortcutOffer = nil
-                installer.consumeShortcutOffer()
-                Task { await createHomeScreenShortcut(for: app) }
-            }
-            Button("lc.shortcut.later".loc, role: .cancel) {
-                shortcutOffer = nil
-                installer.consumeShortcutOffer()
-            }
-        } message: {
-            Text(String(format: "lc.shortcut.offerMessage".loc, shortcutOffer?.displayName ?? ""))
-        }
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { fileUrls in
             Task { await installer.install(.fileURL(fileUrls[0])) }
         }, onDismiss: {
             choosingIPA = false
         })
-        .alert("lc.appList.installation".loc, isPresented: $installReplaceAlert.show) {
-            ForEach(installOptions, id: \.self) { installOption in
-                Button(role: installOption.isReplace ? .destructive : nil, action: {
-                    installReplaceAlert.close(result: installOption)
-                }, label: {
-                    Text(installOption.isReplace ? installOption.nameOfFolderToInstall : "lc.appList.installAsNew".loc)
-                })
-            
-            }
-            Button(role: .cancel, action: {
-                installReplaceAlert.close(result: nil)
-            }, label: {
-                Text("lc.appList.abortInstallation".loc)
-            })
-        } message: {
-            Text("lc.appList.installReplaceTip".loc)
-        }
         .alert("lc.webView.runApp".loc, isPresented: $runWhenMultitaskAlert.show) {
             Button(role: .destructive) {
                 runWhenMultitaskAlert.close(result: true)
@@ -665,16 +620,6 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
 
 
     
-    /// The installer runs outside this screen, but only this screen can ask the user whether to
-    /// replace an installed app or add a second copy, and only it owns the download sheet.
-    func bindInstaller() {
-        installer.downloader = downloadHelper
-        installer.conflictResolver = { options in
-            installOptions = options
-            return await installReplaceAlert.open()
-        }
-    }
-
     func startInstallFromUrl() async {
         guard let installUrlStr = await installUrlInput.open(), installUrlStr.count > 0 else {
             return

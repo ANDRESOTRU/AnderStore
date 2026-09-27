@@ -55,12 +55,52 @@ final class AnderInstaller: ObservableObject {
     @Published private(set) var pendingShortcutApp: LCAppModel?
 
     var isBusy: Bool { progressVisible }
+    @Published private(set) var downloadInProgress = false
+    var canControlDownload: Bool { isBusy && operation?.stage.allowsDownloadControl == true && downloadInProgress }
 
-    /// Asks the user whether to replace an installed app or add a second copy.
-    /// Set by the app list, which owns that dialog. Without it we never guess: we cancel.
-    var conflictResolver: (([AppReplaceOption]) async -> AppReplaceOption?)?
-    /// Downloads with the full-screen progress sheet, owned by the tab view.
+    /// The root supplies the shared downloader before any tab starts an installation.
     var downloader: DownloadHelper?
+
+    @Published private(set) var operation: AnderInstallOperation?
+    @Published private(set) var operationName = ""
+    @Published private(set) var activeStoreSourceURL: URL?
+    @Published private(set) var conflictOptions: [AppReplaceOption] = []
+    @Published private(set) var errorRecovery = "retry"
+    @Published private(set) var errorDetails = ""
+    private var conflictChoice: CheckedContinuation<AppReplaceOption?, Never>?
+
+    @MainActor
+    func answerConflict(_ option: AppReplaceOption?) {
+        let pending = conflictChoice
+        conflictChoice = nil
+        conflictOptions = []
+        pending?.resume(returning: option)
+    }
+
+    @MainActor
+    func toggleDownloadPause() {
+        guard let op = operation, canControlDownload else { return }
+        if op.stage == .paused {
+            downloader?.resume()
+            setStage(.downloading, id: op.id)
+        } else {
+            downloader?.pause()
+            setStage(.paused, id: op.id)
+        }
+    }
+
+    @MainActor
+    func cancelDownload() {
+        guard let op = operation, canControlDownload else { return }
+        setStage(.cancelled, id: op.id)
+        downloader?.cancel()
+    }
+
+    @MainActor
+    private func setStage(_ stage: AnderInstallOperation.Stage, id: UUID) {
+        guard var op = operation, op.transition(stage, operationID: id) else { return }
+        operation = op
+    }
 
     private var installObserver: NSKeyValueObservation?
 
@@ -75,6 +115,7 @@ final class AnderInstaller: ObservableObject {
     @MainActor
     @discardableResult
     func install(_ source: InstallSource, mode: InstallMode = .newInstall) async -> Bool {
+        guard !isBusy else { return false }
         switch source {
         case .storeApp(let app, let sourceURL):
             guard let version = app.latestVersion else {
@@ -99,7 +140,8 @@ final class AnderInstaller: ObservableObject {
             }
             return await install(urlString: version.downloadURL.absoluteString,
                                  provenance: provenance,
-                                 preferredReplacement: mode.replacement)
+                                 preferredReplacement: mode.replacement,
+                                 storeApp: app)
         case .fileURL(let url):
             return await install(urlString: url.absoluteString)
         case .remoteURL(let url):
@@ -127,19 +169,43 @@ final class AnderInstaller: ObservableObject {
         return results
     }
 
+    @MainActor
     @discardableResult
     func install(urlString: String,
                  provenance: AnderProvenance? = nil,
-                 preferredReplacement: LCAppModel? = nil) async -> Bool {
+                 preferredReplacement: LCAppModel? = nil,
+                 storeApp: AltStoreSourceApp? = nil) async -> Bool {
+        // Acquire ownership before the first await, including manifest downloads.
+        guard !progressVisible else { return false }
+        guard checkPrimaryInstance() else { return false }
         errorMessage = nil
-        if urlString.lowercased().hasPrefix("itms-services://") {
-            return await installFromPlist(urlString: urlString,
-                                          provenance: provenance,
-                                          preferredReplacement: preferredReplacement)
+        progressVisible = true
+        let initialStage: AnderInstallOperation.Stage = URL(string: urlString)?.isFileURL == true ? .verifying
+            : (urlString.lowercased().hasPrefix("itms-services://") ? .resolving : .downloading)
+        let op = AnderInstallOperation(stage: initialStage)
+        operation = op
+        progressValue = 0
+        operationName = storeApp?.name ?? URL(string: urlString)?.lastPathComponent ?? "AnderStore"
+        activeStoreBundleId = provenance?.storeBundleId
+        activeStoreSourceURL = provenance.flatMap { URL(string: $0.sourceURL) }
+        defer {
+            installObserver?.invalidate(); installObserver = nil
+            progressVisible = false
+            downloadInProgress = false
+            activeStoreBundleId = nil
+            activeStoreSourceURL = nil
+            answerConflict(nil)
         }
-        return await installFromUrl(urlString: urlString,
-                                    provenance: provenance,
-                                    preferredReplacement: preferredReplacement)
+        let succeeded: Bool
+        if urlString.lowercased().hasPrefix("itms-services://") {
+            succeeded = await installFromPlist(urlString: urlString, provenance: provenance,
+                                               preferredReplacement: preferredReplacement)
+        } else {
+            succeeded = await installFromUrl(urlString: urlString, provenance: provenance,
+                                             preferredReplacement: preferredReplacement)
+        }
+        setStage(succeeded ? .succeeded : .cancelled, id: op.id)
+        return succeeded
     }
 
     // MARK: - Sources
@@ -148,8 +214,6 @@ final class AnderInstaller: ObservableObject {
     private func installFromPlist(urlString: String,
                                   provenance: AnderProvenance?,
                                   preferredReplacement: LCAppModel?) async -> Bool {
-        if progressVisible { return false }
-        guard checkPrimaryInstance() else { return false }
 
         var plistUrlStr = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -192,6 +256,7 @@ final class AnderInstaller: ObservableObject {
                 report("lc.appList.plistNoIpaError".loc)
                 return false
             }
+            if let id = operation?.id { setStage(.downloading, id: id) }
             return await installFromUrl(urlString: ipaUrlStr,
                                         provenance: provenance,
                                         preferredReplacement: preferredReplacement)
@@ -205,23 +270,9 @@ final class AnderInstaller: ObservableObject {
     private func installFromUrl(urlString: String,
                                 provenance: AnderProvenance?,
                                 preferredReplacement: LCAppModel?) async -> Bool {
-        // One install at a time: the signer is not reentrant.
-        if progressVisible {
-            report("lc.appList.installBusy".loc)
-            return false
-        }
-        guard checkPrimaryInstance() else { return false }
-
         guard var installUrl = URL(string: urlString) else {
             report("lc.appList.urlInvalidError".loc)
             return false
-        }
-
-        progressVisible = true
-        activeStoreBundleId = provenance?.storeBundleId
-        defer {
-            progressVisible = false
-            activeStoreBundleId = nil
         }
 
         if installUrl.isFileURL {
@@ -267,7 +318,11 @@ final class AnderInstaller: ObservableObject {
             }
 
             do {
-                try verifyChecksum(of: installUrl, expected: provenance?.expectedSHA256)
+                if operation?.stage == .downloading, let id = operation?.id { setStage(.verifying, id: id) }
+                let readableURL = installUrl
+                try await Task.detached {
+                    try self.verifyChecksum(of: readableURL, expected: provenance?.expectedSHA256)
+                }.value
                 try await installIpaFile(installUrl,
                                          provenance: provenance,
                                          preferredReplacement: preferredReplacement)
@@ -307,16 +362,29 @@ final class AnderInstaller: ObservableObject {
                 .appendingPathExtension("ipa")
             defer { try? fileManager.removeItem(at: destinationURL) }
 
-            try await downloader.download(url: installUrl, to: destinationURL)
+            guard let op = operation else { return false }
+            downloadInProgress = true
+            try await downloader.download(url: installUrl, to: destinationURL,
+                                          inline: provenance != nil) { bytes, expected in
+                guard var current = self.operation else { return }
+                current.recordDownload(bytes: bytes, expected: expected, operationID: op.id)
+                self.operation = current
+            }
+            downloadInProgress = false
             if downloader.cancelled {
                 return false
             }
-            try verifyChecksum(of: destinationURL, expected: provenance?.expectedSHA256)
+            setStage(.verifying, id: op.id)
+            try await Task.detached {
+                try self.verifyChecksum(of: destinationURL, expected: provenance?.expectedSHA256)
+            }.value
             try await installIpaFile(destinationURL,
                                      provenance: provenance,
                                      preferredReplacement: preferredReplacement)
             return true
         } catch is CancellationError {
+            return false
+        } catch let error as URLError where error.code == .cancelled {
             return false
         } catch {
             report(error.localizedDescription)
@@ -327,7 +395,7 @@ final class AnderInstaller: ObservableObject {
     // MARK: - The install itself
 
     private func decompress(_ path: String, _ destination: String, _ progress: Progress) async -> Int32 {
-        extract(path, destination, progress)
+        await Task.detached { extract(path, destination, progress) }.value
     }
 
     @MainActor
@@ -335,11 +403,18 @@ final class AnderInstaller: ObservableObject {
                                 provenance: AnderProvenance?,
                                 preferredReplacement: LCAppModel? = nil) async throws {
         let fm = FileManager()
+        guard let operationID = operation?.id else { throw CancellationError() }
+        setStage(.preparing, id: operationID)
 
         let installProgress = Progress.discreteProgress(totalUnitCount: 100)
         progressValue = 0.0
         installObserver = installProgress.observe(\.fractionCompleted) { p, _ in
             DispatchQueue.main.async {
+                guard AnderInstaller.shared.operation?.id == operationID,
+                      AnderInstaller.shared.isBusy else { return }
+                var current = AnderInstaller.shared.operation!
+                current.recordPreparation(fraction: p.fractionCompleted, operationID: operationID)
+                AnderInstaller.shared.operation = current
                 AnderInstaller.shared.progressValue = Float(p.fractionCompleted)
             }
         }
@@ -438,6 +513,10 @@ final class AnderInstaller: ObservableObject {
             appToReplace = installOptionChosen.appToReplace
         }
 
+        if appToReplace?.uiIsLocked == true {
+            guard try await LCUtils.authenticateUser() else { throw CancellationError() }
+        }
+
         guard let stagedNewApp = LCAppInfo(bundlePath: appFolderPath.path) else {
             throw "lc.appList.appInfoInitError".loc
         }
@@ -468,6 +547,7 @@ final class AnderInstaller: ObservableObject {
 
         // Commit the prepared bundle. The narrow backup window below only starts after every
         // fallible preparation step has completed, and the defer above restores on any error.
+        setStage(.installing, id: operationID)
         let swap = AnderBundleSwap(destination: outputFolder, fileManager: fm)
         bundleSwap = swap
         try swap.installPreparedBundle(from: appFolderPath)
@@ -521,6 +601,8 @@ final class AnderInstaller: ObservableObject {
             finalNewApp.anderStoreBuildVersion = provenance.buildVersion
         }
         finalNewApp.installationDate = Date.now
+        try swap.commit()
+        transactionCommitted = true
 
         if let appToReplace {
             let newAppModel = LCAppModel(appInfo: finalNewApp)
@@ -536,7 +618,6 @@ final class AnderInstaller: ObservableObject {
             let newAppModel = LCAppModel(appInfo: finalNewApp)
             sharedModel.apps.append(newAppModel)
             pendingShortcutApp = newAppModel
-            sharedModel.selectedTab = .apps
 
             if let urlSchemes = finalNewApp.urlSchemes(), urlSchemes.count > 0 {
                 UserDefaults.lcShared().mutableArrayValue(forKey: "LCGuestURLSchemes")
@@ -544,9 +625,6 @@ final class AnderInstaller: ObservableObject {
             }
         }
 
-        transactionCommitted = true
-        swap.commit()
-        progressVisible = false
     }
 
     // MARK: - Helpers
@@ -562,14 +640,19 @@ final class AnderInstaller: ObservableObject {
             return option
         }
         if let provenance {
-            let match = installed.first { $0.appInfo.anderStoreBundleId == provenance.storeBundleId }
-            if let match,
+            let matches = installed.filter {
+                AnderProvenanceIdentity.matches(installedSourceURL: $0.appInfo.anderSourceURL,
+                                                installedBundleID: $0.appInfo.anderStoreBundleId,
+                                                sourceURL: provenance.sourceURL,
+                                                bundleID: provenance.storeBundleId)
+            }
+            if matches.count == 1, let match = matches.first,
                let option = options.first(where: { $0.appToReplace == match }) {
                 return option
             }
         }
-        guard let conflictResolver else { return nil }
-        return await conflictResolver(options)
+        conflictOptions = options
+        return await withCheckedContinuation { conflictChoice = $0 }
     }
 
     private func verifyChecksum(of url: URL, expected: String?) throws {
@@ -597,6 +680,19 @@ final class AnderInstaller: ObservableObject {
 
     @MainActor
     private func report(_ message: String) {
-        errorMessage = message
+        errorDetails = message
+        errorRecovery = "retry"
+        let lower = message.lowercased()
+        if message == "lc.appList.checksumMismatch".loc || message == "lc.appList.invalidChecksum".loc {
+            errorMessage = "lc.store.errorFile".loc
+        } else if lower.contains("certificate") || lower.contains("сертификат") || lower.contains("sign") || lower.contains("подпис") {
+            errorRecovery = "device"
+            errorMessage = "lc.store.errorSignature".loc
+        } else if lower.contains("internet") || lower.contains("offline") || lower.contains("network") || lower.contains("интернет") || lower.contains("сеть") || operation?.stage == .downloading {
+            errorMessage = "lc.store.errorNetwork".loc
+        } else {
+            errorMessage = message + "\n\n" + "lc.store.errorRetry".loc
+        }
+        if let id = operation?.id { setStage(.failed, id: id) }
     }
 }

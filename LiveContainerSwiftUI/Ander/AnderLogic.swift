@@ -1,6 +1,67 @@
 import CryptoKit
 import Foundation
 
+/// Measured download progress and legal install transitions, independent of any screen.
+struct AnderInstallOperation: Equatable {
+    enum Stage: String {
+        case resolving, downloading, paused, verifying, preparing, installing, succeeded, failed, cancelled
+        var isTerminal: Bool { self == .succeeded || self == .failed || self == .cancelled }
+        var allowsDownloadControl: Bool { self == .downloading || self == .paused }
+    }
+    let id: UUID
+    private(set) var stage: Stage
+    private(set) var fraction: Double?
+    private(set) var downloadedBytes: Int64 = 0
+    private(set) var expectedBytes: Int64 = 0
+    private var preparationProgress: Double = 0
+    private(set) var lastAdvance: Date
+
+    init(id: UUID = UUID(), stage: Stage = .downloading, now: Date = Date()) {
+        self.id = id; self.stage = stage; self.lastAdvance = now
+    }
+
+    @discardableResult
+    mutating func transition(_ next: Stage, operationID: UUID, now: Date = Date()) -> Bool {
+        guard id == operationID, !stage.isTerminal else { return false }
+        let allowed: Bool
+        switch next {
+        case .resolving: allowed = false
+        case .paused: allowed = stage == .downloading
+        case .downloading: allowed = stage == .paused || stage == .resolving
+        case .verifying: allowed = stage == .downloading || stage == .paused
+        case .preparing: allowed = stage == .verifying
+        case .installing: allowed = stage == .preparing
+        case .succeeded: allowed = stage == .installing
+        case .cancelled: allowed = stage != .installing
+        case .failed: allowed = true
+        }
+        guard allowed else { return false }
+        stage = next
+        if !next.allowsDownloadControl { fraction = nil }
+        lastAdvance = now
+        return true
+    }
+
+    mutating func recordDownload(bytes: Int64, expected: Int64, operationID: UUID, now: Date = Date()) {
+        guard id == operationID, stage == .downloading, bytes >= downloadedBytes else { return }
+        if bytes > downloadedBytes { lastAdvance = now }
+        downloadedBytes = max(0, bytes)
+        expectedBytes = expected
+        fraction = expected > 0 ? min(1, max(0, Double(bytes) / Double(expected))) : nil
+    }
+
+    mutating func recordPreparation(fraction: Double, operationID: UUID, now: Date = Date()) {
+        guard id == operationID, stage == .preparing, fraction.isFinite,
+              fraction > preparationProgress else { return }
+        preparationProgress = fraction
+        lastAdvance = now
+    }
+
+    func isDelayed(now: Date = Date()) -> Bool {
+        !stage.isTerminal && stage != .paused && now.timeIntervalSince(lastAdvance) >= 30
+    }
+}
+
 enum AnderPairingState: String, Codable {
     case checking
     case missing
@@ -537,9 +598,17 @@ enum AnderCertificateSyncPolicy {
 /// A narrow filesystem transaction used when replacing an installed app bundle.
 /// Call `commit()` after model updates; otherwise `rollback()` restores the previous bundle.
 final class AnderBundleSwap {
+    private struct Journal: Codable {
+        let destinationName: String
+        let backupName: String
+        let hadExisting: Bool
+        var committed: Bool
+    }
     private let fileManager: FileManager
     private let destination: URL
     private var backup: URL?
+    private var journalURL: URL?
+    private var journal: Journal?
     private var installedPreparedBundle = false
 
     init(destination: URL, fileManager: FileManager = .default) {
@@ -548,39 +617,72 @@ final class AnderBundleSwap {
     }
 
     func installPreparedBundle(from prepared: URL) throws {
-        if fileManager.fileExists(atPath: destination.path) {
-            let backupURL = destination.deletingLastPathComponent()
-                .appendingPathComponent(".ander-backup-\(UUID().uuidString).app")
+        let parent = destination.deletingLastPathComponent()
+        let token = UUID().uuidString
+        let record = Journal(destinationName: destination.lastPathComponent,
+                             backupName: ".ander-backup-\(token).app",
+                             hadExisting: fileManager.fileExists(atPath: destination.path), committed: false)
+        let marker = parent.appendingPathComponent(".ander-transaction-\(token).json")
+        try JSONEncoder().encode(record).write(to: marker, options: .atomic)
+        journal = record; journalURL = marker
+        if record.hadExisting {
+            let backupURL = parent.appendingPathComponent(record.backupName)
             try fileManager.moveItem(at: destination, to: backupURL)
             backup = backupURL
         }
-        do {
-            try fileManager.moveItem(at: prepared, to: destination)
-            installedPreparedBundle = true
-        } catch {
-            if let backup, fileManager.fileExists(atPath: backup.path) {
-                try? fileManager.moveItem(at: backup, to: destination)
-                self.backup = nil
-            }
-            throw error
-        }
+        try fileManager.moveItem(at: prepared, to: destination)
+        installedPreparedBundle = true
     }
 
     func rollback() {
-        if installedPreparedBundle, fileManager.fileExists(atPath: destination.path) {
-            try? fileManager.removeItem(at: destination)
+        do {
+            if installedPreparedBundle, fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            if let backup, fileManager.fileExists(atPath: backup.path) {
+                try fileManager.moveItem(at: backup, to: destination)
+            }
+            if let journalURL { try fileManager.removeItem(at: journalURL) }
+            backup = nil; journal = nil; journalURL = nil; installedPreparedBundle = false
+        } catch {
+            // Keep the durable marker if restoration failed; the next launch retries it.
         }
-        if let backup, fileManager.fileExists(atPath: backup.path) {
-            try? fileManager.moveItem(at: backup, to: destination)
-        }
-        backup = nil
-        installedPreparedBundle = false
     }
 
-    func commit() {
+    func commit() throws {
+        guard var record = journal, let marker = journalURL else { return }
+        record.committed = true
+        try JSONEncoder().encode(record).write(to: marker, options: .atomic)
+        journal = record
+        // After the marker is durable, cleanup cannot turn success into a failed install.
         if let backup { try? fileManager.removeItem(at: backup) }
-        backup = nil
-        installedPreparedBundle = false
+        try? fileManager.removeItem(at: marker)
+        backup = nil; journal = nil; journalURL = nil; installedPreparedBundle = false
+    }
+
+    /// Reconcile files before constructing models. Names are constrained to this directory.
+    static func recoverInterrupted(in directory: URL, fileManager: FileManager = .default) throws {
+        let files = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        for marker in files where marker.lastPathComponent.hasPrefix(".ander-transaction-") && marker.pathExtension == "json" {
+            let record = try JSONDecoder().decode(Journal.self, from: Data(contentsOf: marker))
+            guard !record.destinationName.hasPrefix("."), record.destinationName.hasSuffix(".app"),
+                  !record.destinationName.contains("/"), !record.destinationName.contains("\\"),
+                  record.backupName.hasPrefix(".ander-backup-"), record.backupName.hasSuffix(".app"),
+                  !record.backupName.contains("/"), !record.backupName.contains("\\") else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            let destination = directory.appendingPathComponent(record.destinationName)
+            let backup = directory.appendingPathComponent(record.backupName)
+            if record.committed {
+                if fileManager.fileExists(atPath: backup.path) { try fileManager.removeItem(at: backup) }
+            } else if fileManager.fileExists(atPath: backup.path) {
+                if fileManager.fileExists(atPath: destination.path) { try fileManager.removeItem(at: destination) }
+                try fileManager.moveItem(at: backup, to: destination)
+            } else if !record.hadExisting && fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.removeItem(at: marker)
+        }
     }
 }
 

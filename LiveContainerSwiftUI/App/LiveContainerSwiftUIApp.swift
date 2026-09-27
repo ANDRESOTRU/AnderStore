@@ -26,12 +26,14 @@ struct LiveContainerSwiftUIApp : SwiftUI.App {
         do {
             // load apps
             try fm.createDirectory(at: LCPath.bundlePath, withIntermediateDirectories: true)
+            do { try AnderBundleSwap.recoverInterrupted(in: LCPath.bundlePath, fileManager: fm) }
+            catch { AnderInstaller.shared.errorMessage = "lc.store.errorRecovery".loc }
             let appDirs = try fm.contentsOfDirectory(atPath: LCPath.bundlePath.path)
             for appDir in appDirs {
-                if !appDir.hasSuffix(".app") {
+                if appDir.hasPrefix(".") || !appDir.hasSuffix(".app") {
                     continue
                 }
-                let newApp = LCAppInfo(bundlePath: "\(LCPath.bundlePath.path)/\(appDir)")!
+                guard let newApp = LCAppInfo(bundlePath: "\(LCPath.bundlePath.path)/\(appDir)") else { continue }
                 newApp.relativeBundlePath = appDir
                 newApp.isShared = false
                 let model = LCAppModel(appInfo: newApp)
@@ -47,12 +49,16 @@ struct LiveContainerSwiftUIApp : SwiftUI.App {
             }
             if LCPath.lcGroupDocPath != LCPath.docPath {
                 try fm.createDirectory(at: LCPath.lcGroupBundlePath, withIntermediateDirectories: true)
+                if DataManager.shared.model.multiLCStatus != 2 {
+                    do { try AnderBundleSwap.recoverInterrupted(in: LCPath.lcGroupBundlePath, fileManager: fm) }
+                    catch { AnderInstaller.shared.errorMessage = "lc.store.errorRecovery".loc }
+                }
                 let appDirsShared = try fm.contentsOfDirectory(atPath: LCPath.lcGroupBundlePath.path)
                 for appDir in appDirsShared {
-                    if !appDir.hasSuffix(".app") {
+                    if appDir.hasPrefix(".") || !appDir.hasSuffix(".app") {
                         continue
                     }
-                    let newApp = LCAppInfo(bundlePath: "\(LCPath.lcGroupBundlePath.path)/\(appDir)")!
+                    guard let newApp = LCAppInfo(bundlePath: "\(LCPath.lcGroupBundlePath.path)/\(appDir)") else { continue }
                     newApp.relativeBundlePath = appDir
                     newApp.isShared = true
                     let model = LCAppModel(appInfo: newApp)
